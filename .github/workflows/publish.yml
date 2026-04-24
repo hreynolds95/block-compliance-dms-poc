@@ -1,0 +1,110 @@
+name: Publish
+
+# Fires on every push to main. For any .md files changed under docs/,
+# updates effective_date + last_reviewed_date in frontmatter and
+# appends a record to the audit log.
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'docs/**/*.md'
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    # Skip if this commit was made by the bot (prevents infinite loop)
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 2
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install pyyaml
+
+      - name: Update frontmatter and write audit log
+        run: |
+          python3 - <<'EOF'
+          import subprocess, yaml, json, os, re
+          from datetime import date, datetime, timezone
+
+          today     = date.today().isoformat()
+          now_iso   = datetime.now(timezone.utc).isoformat()
+          sha       = subprocess.run(['git', 'rev-parse', 'HEAD'], capture_output=True, text=True).stdout.strip()
+          short_sha = sha[:8]
+
+          # Find docs changed in this commit vs its parent
+          result = subprocess.run(
+              ['git', 'diff', '--name-only', 'HEAD~1', 'HEAD'],
+              capture_output=True, text=True
+          )
+          changed = [f for f in result.stdout.strip().split('\n')
+                     if f.startswith('docs/') and f.endswith('.md')]
+
+          audit_entries = []
+          for path in changed:
+              if not os.path.exists(path): continue
+              content = open(path).read()
+              parts   = content.split('---', 2)
+              if len(parts) < 3: continue
+              try:
+                  fm = yaml.safe_load(parts[1])
+              except:
+                  continue
+
+              # Update fields
+              fm['effective_date']    = today
+              fm['last_reviewed_date'] = today
+              if fm.get('status') == 'in-review':
+                  fm['status'] = 'published'
+
+              updated_fm  = yaml.dump(fm, default_flow_style=False, allow_unicode=True, sort_keys=False)
+              new_content = f'---\n{updated_fm}---{parts[2]}'
+              open(path, 'w').write(new_content)
+              print(f'Updated frontmatter: {path}')
+
+              audit_entries.append({
+                  'timestamp':   now_iso,
+                  'sha':         sha,
+                  'short_sha':   short_sha,
+                  'doc_id':      fm.get('doc_id', ''),
+                  'title':       fm.get('title', ''),
+                  'tier':        fm.get('tier'),
+                  'action':      'published',
+                  'change_type': fm.get('change_type', ''),
+                  'review_cycle':fm.get('review_cycle', ''),
+                  'effective_date': today,
+                  'actor':       '${{ github.actor }}',
+              })
+
+          if not audit_entries:
+              print('No publishable docs found.')
+              exit(0)
+
+          # Append to audit log
+          os.makedirs('audit', exist_ok=True)
+          with open('audit/audit-log.jsonl', 'a') as f:
+              for entry in audit_entries:
+                  f.write(json.dumps(entry) + '\n')
+
+          print(f'Appended {len(audit_entries)} audit entry/entries.')
+          EOF
+
+      - name: Commit frontmatter updates and audit log
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/ audit/audit-log.jsonl
+          git diff --cached --quiet && echo "Nothing to commit." || \
+            git commit -m "chore(publish): update frontmatter + audit log [skip ci]"
+          git push

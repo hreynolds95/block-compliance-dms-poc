@@ -1,0 +1,97 @@
+name: Approval Gate
+
+# Runs whenever a label is added/removed or the PR is updated.
+# Checks that the correct tier approval label is present before allowing merge.
+# Branch protection should require this check to pass.
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, labeled, unlabeled]
+    paths:
+      - 'docs/**/*.md'
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  gate:
+    name: approval-gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install pyyaml
+
+      - name: Check approval label
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.sha }}
+          REPO: ${{ github.repository }}
+        run: |
+          python3 - <<'EOF'
+          import subprocess, os, yaml, sys
+
+          base = os.environ['BASE_SHA']
+          head = os.environ['HEAD_SHA']
+          pr   = os.environ['PR_NUMBER']
+          repo = os.environ['REPO']
+
+          # Find changed doc files
+          result = subprocess.run(
+              ['git', 'diff', '--name-only', base, head],
+              capture_output=True, text=True
+          )
+          changed = [f for f in result.stdout.strip().split('\n')
+                     if f.startswith('docs/') and f.endswith('.md')]
+
+          if not changed or all(not os.path.exists(f) for f in changed):
+              print('No compliance docs changed — gate not required.')
+              sys.exit(0)
+
+          # Determine highest tier in this PR
+          max_tier = 0
+          for path in changed:
+              if not os.path.exists(path): continue
+              content = open(path).read()
+              parts = content.split('---')
+              if len(parts) < 3: continue
+              try:
+                  fm = yaml.safe_load(parts[1])
+                  tier = int(fm.get('tier', 0))
+                  if tier > max_tier:
+                      max_tier = tier
+              except:
+                  pass
+
+          if max_tier == 0:
+              print('Could not determine tier — skipping gate.')
+              sys.exit(0)
+
+          required_label = f'approved-t{max_tier}'
+
+          # Get PR labels
+          result = subprocess.run(
+              ['gh', 'pr', 'view', pr, '--json', 'labels',
+               '--jq', '.labels[].name', '--repo', repo],
+              capture_output=True, text=True
+          )
+          labels = result.stdout.strip().split('\n')
+
+          if required_label in labels:
+              print(f'✅ Approval label `{required_label}` is present — gate passed.')
+              sys.exit(0)
+          else:
+              print(f'❌ Missing label `{required_label}`.')
+              print(f'   This is a Tier {max_tier} document. Add the `{required_label}` label to this PR to proceed.')
+              sys.exit(1)
+          EOF

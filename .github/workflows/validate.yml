@@ -1,0 +1,95 @@
+name: Validate Document Frontmatter
+
+on:
+  pull_request:
+    paths:
+      - 'docs/**/*.md'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install pyyaml
+
+      - name: Validate changed docs
+        id: validate
+        run: |
+          python3 - <<'EOF'
+          import subprocess, sys, yaml, re, os
+
+          result = subprocess.run(
+              ['git', 'diff', '--name-only',
+               '${{ github.event.pull_request.base.sha }}', '${{ github.sha }}'],
+              capture_output=True, text=True
+          )
+          changed = [f for f in result.stdout.strip().split('\n')
+                     if f.startswith('docs/') and f.endswith('.md')]
+
+          REQUIRED = [
+              'doc_id', 'title', 'version', 'status', 'tier',
+              'domain', 'owner', 'approval_type', 'doc_type',
+              'next_review_date', 'retention_years',
+          ]
+          VALID_STATUS       = {'draft', 'in-review', 'published', 'retired'}
+          VALID_TIERS        = {1, 2, 3}
+          VALID_APPROVAL     = {'board', 'committee', 'owner'}
+          VALID_DOC_TYPES    = {'Policy', 'Standard', 'Procedure'}
+
+          errors = []
+          for path in changed:
+              if not os.path.exists(path):
+                  continue
+              content = open(path).read()
+              parts = content.split('---')
+              if len(parts) < 3:
+                  errors.append(f'{path}: missing YAML frontmatter block')
+                  continue
+              try:
+                  fm = yaml.safe_load(parts[1])
+              except yaml.YAMLError as e:
+                  errors.append(f'{path}: invalid YAML — {e}')
+                  continue
+
+              for field in REQUIRED:
+                  if not fm.get(field):
+                      errors.append(f'{path}: missing required field `{field}`')
+
+              if fm.get('status') not in VALID_STATUS:
+                  errors.append(f'{path}: invalid status `{fm.get("status")}` — must be one of {VALID_STATUS}')
+              if fm.get('tier') not in VALID_TIERS:
+                  errors.append(f'{path}: invalid tier `{fm.get("tier")}` — must be 1, 2, or 3')
+              if fm.get('approval_type') not in VALID_APPROVAL:
+                  errors.append(f'{path}: invalid approval_type `{fm.get("approval_type")}` — must be one of {VALID_APPROVAL}')
+              if fm.get('doc_type') not in VALID_DOC_TYPES:
+                  errors.append(f'{path}: invalid doc_type `{fm.get("doc_type")}` — must be one of {VALID_DOC_TYPES}')
+
+              # Tier / approval_type consistency
+              expected = {1: 'board', 2: 'committee', 3: 'owner'}
+              t = fm.get('tier')
+              if t in expected and fm.get('approval_type') != expected[t]:
+                  errors.append(f'{path}: tier {t} requires approval_type `{expected[t]}`, got `{fm.get("approval_type")}`')
+
+              # Tier path consistency
+              tier_dir = f'docs/tier-{t}/'
+              if t and not path.startswith(tier_dir):
+                  errors.append(f'{path}: Tier {t} document must live in `{tier_dir}`')
+
+          if errors:
+              print('::error::Frontmatter validation failed:')
+              for e in errors:
+                  print(f'::error::{e}')
+              sys.exit(1)
+          else:
+              print(f'✅ All {len(changed)} changed doc(s) passed validation.')
+          EOF

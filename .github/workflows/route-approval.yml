@@ -1,0 +1,137 @@
+name: Route Approval
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+    paths:
+      - 'docs/**/*.md'
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  route:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install pyyaml
+
+      - name: Detect tier and post approval checklist
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.sha }}
+          REPO: ${{ github.repository }}
+        run: |
+          python3 - <<'EOF'
+          import subprocess, os, yaml, json
+
+          base = os.environ['BASE_SHA']
+          head = os.environ['HEAD_SHA']
+          pr   = os.environ['PR_NUMBER']
+          repo = os.environ['REPO']
+
+          result = subprocess.run(
+              ['git', 'diff', '--name-only', base, head],
+              capture_output=True, text=True
+          )
+          changed = [f for f in result.stdout.strip().split('\n')
+                     if f.startswith('docs/') and f.endswith('.md')]
+
+          docs_info = []
+          max_tier  = 0
+          for path in changed:
+              if not os.path.exists(path): continue
+              content = open(path).read()
+              parts = content.split('---')
+              if len(parts) < 3: continue
+              try:
+                  fm = yaml.safe_load(parts[1])
+              except:
+                  continue
+              tier = fm.get('tier', 0)
+              if tier > max_tier:
+                  max_tier = tier
+              docs_info.append({
+                  'path': path,
+                  'doc_id': fm.get('doc_id', ''),
+                  'title': fm.get('title', ''),
+                  'tier': tier,
+                  'approval_type': fm.get('approval_type', ''),
+                  'owner': fm.get('owner', ''),
+                  'doc_type': fm.get('doc_type', ''),
+              })
+
+          if not docs_info:
+              print('No compliance docs changed — skipping.')
+              exit(0)
+
+          tier_labels = {
+              1: ('tier-1-review', 'Board-approved', 'Board of Directors / Chief Compliance Officer'),
+              2: ('tier-2-review', 'Committee-approved', 'Compliance Committee'),
+              3: ('tier-3-review', 'Owner-approved', 'Document Owner'),
+          }
+          approval_steps = {
+              1: ['QC review by Compliance team', 'Legal review (if material change)', 'Board / CCO approval', 'Publication to main'],
+              2: ['QC review by Compliance team', 'Committee approval', 'Publication to main'],
+              3: ['Document Owner review', 'Publication to main'],
+          }
+
+          # Apply tier label to PR
+          label, tier_name, approver_desc = tier_labels.get(max_tier, tier_labels[3])
+          subprocess.run(['gh', 'pr', 'edit', pr, '--add-label', label, '--repo', repo], check=False)
+
+          # Build comment
+          doc_table = '\n'.join(
+              f'| `{d["doc_id"]}` | {d["title"]} | Tier {d["tier"]} | {d["doc_type"]} | {d["owner"]} |'
+              for d in docs_info
+          )
+          steps_md = '\n'.join(f'- [ ] {s}' for s in approval_steps.get(max_tier, []))
+          approved_label = f'approved-t{max_tier}'
+
+          comment = f"""## 📋 Compliance Document Review
+
+          | Doc ID | Title | Tier | Type | Owner |
+          |--------|-------|------|------|-------|
+          {doc_table}
+
+          ---
+
+          ### Approval path: {tier_name}
+          **Required approver:** {approver_desc}
+
+          **Tollgate checklist:**
+          {steps_md}
+
+          ---
+
+          ### ⚙️ How to approve (Phase 1 — solo simulation)
+          When all checklist items are complete, add the label **`{approved_label}`** to this PR.
+          The approval gate will re-run and unlock the merge button once the label is applied.
+
+          > _Phase 2: CODEOWNERS will require a review from the designated approver instead of a label._
+          """
+
+          # Dedent
+          comment = '\n'.join(line.lstrip() for line in comment.strip().split('\n'))
+
+          # Post comment via gh
+          result = subprocess.run(
+              ['gh', 'pr', 'comment', pr, '--body', comment, '--repo', repo],
+              capture_output=True, text=True
+          )
+          print(result.stdout)
+          if result.returncode != 0:
+              print(result.stderr)
+          EOF

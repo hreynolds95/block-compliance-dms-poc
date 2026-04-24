@@ -1,0 +1,70 @@
+# Block Compliance DMS — Document Registry
+# Central metadata index. Mirrors key frontmatter fields for quick lookup by workflows.
+# Update this file whenever a doc is added, removed, or its tier/owner changes.
+
+documents:
+  - doc_id: GOV-001
+    title: "Block, Inc. Compliance Management System (CMS) Policy"
+    tier: 1
+    approval_type: board
+    domain: governance
+    doc_type: Policy
+    owner: Tyler Hand
+    status: published
+    next_review_date: "2026-10-31"
+    path: docs/tier-1/GOV-001-cms-policy.md
+
+  - doc_id: EE-001
+    title: "Block, Inc. Code of Business Conduct & Ethics"
+    tier: 1
+    approval_type: board
+    domain: ethics-and-employee-conduct
+    doc_type: Policy
+    owner: Matt Latham
+    status: published
+    next_review_date: "2026-10-31"
+    path: docs/tier-1/EE-001-code-of-ethics.md
+
+  - doc_id: GOV-011
+    title: "Block, Inc. Compliance Policy on Policies"
+    tier: 2
+    approval_type: committee
+    domain: governance
+    doc_type: Policy
+    owner: Stevi Winer
+    status: published
+    next_review_date: "2026-06-06"
+    path: docs/tier-2/GOV-011-policy-on-policies.md
+
+  - doc_id: FC-017
+    title: "SEL Financial Crimes Program"
+    tier: 2
+    approval_type: committee
+    domain: financial-crimes
+    doc_type: Standard
+    owner: Ryan Goldstone
+    status: published
+    next_review_date: "2026-05-31"
+    path: docs/tier-2/FC-017-sel-financial-crimes-program.md
+
+  - doc_id: GOV-025
+    title: "Afterpay US Inc. Regulatory Change Management Standard"
+    tier: 3
+    approval_type: owner
+    domain: governance
+    doc_type: Standard
+    owner: Corey Chamberlain
+    status: published
+    next_review_date: "2026-03-31"
+    path: docs/tier-3/GOV-025-regulatory-change-management.md
+
+  - doc_id: FC-032
+    title: "Cash App US Know Your Business Program for Cash for Business Customers"
+    tier: 3
+    approval_type: owner
+    domain: financial-crimes
+    doc_type: Standard
+    owner: Vanessa Simpson
+    status: published
+    next_review_date: "2026-03-31"
+    path: docs/tier-3/FC-032-kyb-program.md

@@ -1,0 +1,23 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# CODEOWNERS — Block Compliance DMS PoC
+#
+# Maps each tier path to the required approver(s).
+# Phase 1 (solo simulation): all tiers route to @hreynolds95.
+# Phase 2 (team): replace @hreynolds95 with real Block teammate handles.
+#
+# Tier 1 — Board-approved (Chief Compliance Officer / Board delegate)
+# Tier 2 — Committee-approved (Compliance Committee member)
+# Tier 3 — Owner-approved (Document Owner)
+# ──────────────────────────────────────────────────────────────────────────────
+
+# Tier 1 — Board-approved
+docs/tier-1/ @hreynolds95
+
+# Tier 2 — Committee-approved
+docs/tier-2/ @hreynolds95
+
+# Tier 3 — Owner-approved
+docs/tier-3/ @hreynolds95
+
+# Audit log — compliance team only
+audit/ @hreynolds95

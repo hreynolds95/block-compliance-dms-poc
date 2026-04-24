@@ -1,0 +1,144 @@
+name: Initiate Annual Review
+
+# Manually triggered. Creates a review branch and opens a PR pre-filled
+# with the approval checklist for the specified document.
+
+on:
+  workflow_dispatch:
+    inputs:
+      doc_id:
+        description: 'Document ID (e.g. GOV-011, FC-017)'
+        required: true
+        type: string
+      change_type:
+        description: 'Change type'
+        required: true
+        type: choice
+        options:
+          - immaterial
+          - material
+      notes:
+        description: 'Brief description of changes (appears in PR body)'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  initiate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install pyyaml
+
+      - name: Create review branch and open PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DOC_ID: ${{ github.event.inputs.doc_id }}
+          CHANGE_TYPE: ${{ github.event.inputs.change_type }}
+          NOTES: ${{ github.event.inputs.notes }}
+          REPO: ${{ github.repository }}
+        run: |
+          python3 - <<'EOF'
+          import subprocess, os, yaml, sys, re
+          from datetime import date, timedelta
+
+          doc_id      = os.environ['DOC_ID'].strip()
+          change_type = os.environ['CHANGE_TYPE']
+          notes       = os.environ.get('NOTES', '').strip()
+          repo        = os.environ['REPO']
+          year        = date.today().year
+          branch      = f'review/{doc_id.lower()}-{year}'
+
+          # Find doc file
+          result = subprocess.run(
+              ['grep', '-rl', f'doc_id: {doc_id}', 'docs/'],
+              capture_output=True, text=True
+          )
+          matches = [f.strip() for f in result.stdout.strip().split('\n') if f.strip().endswith('.md')]
+          if not matches:
+              print(f'::error::Could not find a doc with doc_id: {doc_id}')
+              sys.exit(1)
+          doc_path = matches[0]
+          print(f'Found: {doc_path}')
+
+          # Configure git
+          subprocess.run(['git', 'config', 'user.name',  'github-actions[bot]'], check=True)
+          subprocess.run(['git', 'config', 'user.email', 'github-actions[bot]@users.noreply.github.com'], check=True)
+
+          # Create branch
+          subprocess.run(['git', 'checkout', '-b', branch], check=True)
+
+          # Update frontmatter: set change_type, review_cycle, bump last_reviewed_date placeholder
+          content = open(doc_path).read()
+          parts   = content.split('---', 2)
+          fm      = yaml.safe_load(parts[1])
+          title   = fm.get('title', doc_id)
+          tier    = fm.get('tier', 3)
+
+          fm['change_type']   = change_type
+          fm['review_cycle']  = 'annual'
+          fm['review_status_note'] = f'Annual review initiated {date.today().isoformat()}'
+
+          updated_fm = yaml.dump(fm, default_flow_style=False, allow_unicode=True, sort_keys=False)
+          new_content = f'---\n{updated_fm}---{parts[2]}'
+          open(doc_path, 'w').write(new_content)
+
+          # Commit and push
+          subprocess.run(['git', 'add', doc_path], check=True)
+          subprocess.run(['git', 'commit', '-m', f'chore: initiate annual review — {doc_id}'], check=True)
+          subprocess.run(['git', 'push', 'origin', branch], check=True)
+
+          # Build PR body
+          approval_steps = {
+              1: ['- [ ] QC review by Compliance team', '- [ ] Legal review (material changes)', '- [ ] Board / CCO approval'],
+              2: ['- [ ] QC review by Compliance team', '- [ ] Committee approval'],
+              3: ['- [ ] Document Owner review'],
+          }
+          steps_md  = '\n'.join(approval_steps.get(tier, approval_steps[3]))
+          notes_md  = f'\n**Notes:** {notes}\n' if notes else ''
+          body = f"""## Annual Review — {doc_id}
+
+          **Document:** {title}
+          **Tier:** {tier}
+          **Change type:** {change_type}
+          **Review year:** {year}{notes_md}
+
+          ---
+
+          ### Tollgate checklist
+          {steps_md}
+          - [ ] Frontmatter updated (owner, next_review_date, version)
+          - [ ] Document body reviewed and updated
+
+          ---
+
+          > Merge this PR when all checklist items are complete and the `approved-t{tier}` label has been applied.
+          """
+          body = '\n'.join(line.lstrip() for line in body.strip().split('\n'))
+
+          # Open PR
+          result = subprocess.run([
+              'gh', 'pr', 'create',
+              '--base', 'main',
+              '--head', branch,
+              '--title', f'Annual Review: {doc_id} ({year})',
+              '--body', body,
+              '--repo', repo,
+          ], capture_output=True, text=True)
+          print(result.stdout)
+          if result.returncode != 0:
+              print(result.stderr)
+              sys.exit(1)
+          EOF
