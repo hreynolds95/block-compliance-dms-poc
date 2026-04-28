@@ -1,0 +1,200 @@
+name: Review Date Alerts
+
+# Daily cron: checks next_review_date for all published documents in
+# document-registry.yaml. Opens a GitHub Issue at 90, 60, and 30 days
+# before the review is due, and when a review becomes overdue.
+#
+# PoP references:
+#   Section 2.6  — Review Cycles (annual / triennial)
+#   Section 2.9  — Awareness Campaign (Phase 2: add Slack webhook)
+#
+# Each Issue:
+#   - Is labelled with review-due-90d / 60d / 30d or review-overdue
+#   - Assigned to document_owner_github from document-registry.yaml
+#   - Contains a direct link to trigger annual-review.yml dispatch
+#
+# Deduplication: skips creating an Issue if an open Issue with the same
+# doc_id and label already exists.
+#
+# Phase 2: route alerts to Slack #compliance-policy-help and DM the
+# Document Owner on the 30-day and overdue thresholds.
+
+on:
+  schedule:
+    - cron: '0 14 * * *'   # 09:00 ET daily (14:00 UTC)
+  workflow_dispatch: {}    # manual trigger for testing
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  alert:
+    name: review-date-alerts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install pyyaml
+
+      - name: Ensure alert labels exist
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          labels=(
+            "review-due-90d:0075ca:Early notice: review due in 90 days"
+            "review-due-60d:e4a10c:Reminder: review due in 60 days"
+            "review-due-30d:d93f0b:Urgent: review due in 30 days"
+            "review-overdue:b60205:Review is overdue"
+          )
+          for entry in "${labels[@]}"; do
+            name="${entry%%:*}"
+            rest="${entry#*:}"
+            color="${rest%%:*}"
+            desc="${rest#*:}"
+            gh label create "$name" --color "$color" --description "$desc" \
+              --repo "$REPO" 2>/dev/null || true
+          done
+
+      - name: Open review alert issues
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          python3 - <<'EOF'
+          import os, yaml, json, subprocess
+          from datetime import date
+
+          today = date.today()
+          repo  = os.environ['REPO']
+
+          THRESHOLDS = [
+              (90, 'review-due-90d',  'Early Notice'),
+              (60, 'review-due-60d',  'Reminder'),
+              (30, 'review-due-30d',  'Urgent'),
+          ]
+
+          registry = yaml.safe_load(open('document-registry.yaml'))
+          docs = [d for d in registry.get('documents', [])
+                  if d.get('status') == 'published']
+
+          for doc in docs:
+              doc_id  = doc.get('doc_id', '')
+              title   = doc.get('title', '')
+              tier    = doc.get('tier', '')
+              owner   = (doc.get('document_owner_github') or '').lstrip('@')
+              due_str = doc.get('next_review_date', '')
+
+              if not due_str:
+                  continue
+              try:
+                  due = date.fromisoformat(str(due_str))
+              except (ValueError, TypeError):
+                  print(f'⚠️  {doc_id}: cannot parse next_review_date "{due_str}" — skipping.')
+                  continue
+
+              days_until = (due - today).days
+
+              # Determine which alert fires today
+              label_to_apply = None
+              alert_level    = None
+
+              for threshold, label, level in THRESHOLDS:
+                  if days_until == threshold:
+                      label_to_apply = label
+                      alert_level    = level
+                      break
+
+              if label_to_apply is None and days_until <= 0:
+                  label_to_apply = 'review-overdue'
+                  alert_level    = 'Overdue'
+
+              if label_to_apply is None:
+                  continue
+
+              # Dedup: skip if open issue already exists for this doc + label
+              result = subprocess.run([
+                  'gh', 'issue', 'list',
+                  '--repo', repo,
+                  '--label', label_to_apply,
+                  '--state', 'open',
+                  '--json', 'number,title',
+              ], capture_output=True, text=True)
+              existing = json.loads(result.stdout or '[]')
+              if any(doc_id in i.get('title', '') for i in existing):
+                  print(f'⏭  {doc_id}: open {label_to_apply} issue already exists — skipping.')
+                  continue
+
+              # Build issue body
+              dispatch_url = f'https://github.com/{repo}/actions/workflows/annual-review.yml'
+              due_display  = due.strftime('%B %-d, %Y')
+              if days_until < 0:
+                  due_note = f'**{abs(days_until)} days overdue** (was due {due_display})'
+                  overdue_banner = '\n> ⚠️ **This review is now overdue. Immediate action required.**\n'
+              else:
+                  due_note = f'{days_until} days until due ({due_display})'
+                  overdue_banner = ''
+
+              body = f"""## {alert_level}: {doc_id} review due {due_display}
+{overdue_banner}
+| Field | Value |
+|---|---|
+| **Document** | {title} |
+| **Doc ID** | `{doc_id}` |
+| **Tier** | {tier} |
+| **Review due** | {due.isoformat()} |
+| **Status** | {due_note} |
+| **Document Owner** | @{owner if owner else '_(unassigned)_'} |
+
+---
+
+### Next steps
+
+1. **Trigger the annual review workflow:**
+   [{dispatch_url}]({dispatch_url})
+   - Set `doc_id` → `{doc_id}`
+   - Set `change_type` → `immaterial` or `material`
+
+2. The workflow creates a review branch and opens a PR with the tier {tier} approval checklist.
+
+3. Complete all checklist items and apply the `approved-t{tier}` label to unblock merge.
+
+---
+_Auto-generated by `review-alerts.yml` · {today.isoformat()}_
+"""
+
+              # Create the issue
+              assign_args = ['--assignee', owner] if owner else []
+              result = subprocess.run([
+                  'gh', 'issue', 'create',
+                  '--repo', repo,
+                  '--title', f'[{alert_level}] {doc_id} — review due {due.isoformat()}',
+                  '--body', body,
+                  '--label', label_to_apply,
+                  *assign_args,
+              ], capture_output=True, text=True)
+
+              if result.returncode == 0:
+                  url = result.stdout.strip()
+                  print(f'✅ {doc_id}: opened {label_to_apply} issue ({days_until}d until due) — {url}')
+              else:
+                  # Retry without assignee if assignment failed (placeholder handles in Phase 1)
+                  result2 = subprocess.run([
+                      'gh', 'issue', 'create',
+                      '--repo', repo,
+                      '--title', f'[{alert_level}] {doc_id} — review due {due.isoformat()}',
+                      '--body', body,
+                      '--label', label_to_apply,
+                  ], capture_output=True, text=True)
+                  if result2.returncode == 0:
+                      url = result2.stdout.strip()
+                      print(f'✅ {doc_id}: opened {label_to_apply} issue (no assignee — Phase 1 placeholder handle) — {url}')
+                  else:
+                      print(f'❌ {doc_id}: failed to open issue — {result2.stderr.strip()}')
+          EOF
