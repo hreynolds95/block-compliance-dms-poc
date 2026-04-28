@@ -1,0 +1,158 @@
+name: Role Enforcement
+
+# Enforces the two-role document model (PoP Section 2.4) and prohibits
+# owner self-approval of off-cycle Material Changes (PoP 2.11.1 fn.9).
+#
+# Rules enforced:
+#   1. PR author (Document Submitter) must be listed as document_submitter_github
+#      in document-registry.yaml for each changed document.
+#   2. For off-cycle Material Changes (change_type: material, review_cycle: null
+#      or review_cycle: off-cycle), the PR author must NOT be the document_owner_github.
+#      This prevents an Owner who is also the Submitter from self-approving.
+#
+# Note: This workflow checks submission eligibility, not approval eligibility.
+# The approval-gate.yml enforces the correct approval label is present before merge.
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+    paths:
+      - 'docs/**/*.md'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  role-check:
+    name: role-enforcement
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install pyyaml
+
+      - name: Enforce two-role model
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.sha }}
+          REPO: ${{ github.repository }}
+        run: |
+          python3 - <<'EOF'
+          import subprocess, os, yaml, sys
+
+          pr_author  = os.environ['PR_AUTHOR'].lstrip('@').lower()
+          base       = os.environ['BASE_SHA']
+          head       = os.environ['HEAD_SHA']
+          pr         = os.environ['PR_NUMBER']
+          repo       = os.environ['REPO']
+
+          # Find changed doc files
+          result = subprocess.run(
+              ['git', 'diff', '--name-only', base, head],
+              capture_output=True, text=True
+          )
+          changed = [f for f in result.stdout.strip().split('\n')
+                     if f.startswith('docs/') and f.endswith('.md')]
+
+          if not changed or all(not os.path.exists(f) for f in changed):
+              print('No compliance docs changed — role check not required.')
+              sys.exit(0)
+
+          # Load document registry
+          registry = yaml.safe_load(open('document-registry.yaml'))
+          reg_by_path = {d['path']: d for d in registry.get('documents', [])}
+
+          errors = []
+          warnings = []
+
+          for path in changed:
+              if not os.path.exists(path):
+                  continue
+
+              # Load frontmatter
+              content = open(path).read()
+              parts = content.split('---', 2)
+              if len(parts) < 3:
+                  continue
+              try:
+                  fm = yaml.safe_load(parts[1])
+              except:
+                  continue
+
+              doc_id      = fm.get('doc_id', path)
+              change_type = (fm.get('change_type') or '').lower()
+              review_cycle = (fm.get('review_cycle') or '').lower()
+
+              # Look up registry entry by path
+              reg = reg_by_path.get(path)
+              if not reg:
+                  warnings.append(
+                      f'{doc_id}: not found in document-registry.yaml — '
+                      f'add entry with document_owner_github and document_submitter_github'
+                  )
+                  continue
+
+              owner_github     = (reg.get('document_owner_github') or '').lstrip('@').lower()
+              submitter_github = (reg.get('document_submitter_github') or '').lstrip('@').lower()
+
+              # Rule 1: PR author must be a registered Document Submitter
+              if submitter_github and pr_author not in [s.strip().lstrip('@').lower()
+                                                         for s in submitter_github.split(',')]:
+                  errors.append(
+                      f'{doc_id}: PR author `@{pr_author}` is not a registered Document Submitter '
+                      f'for this document (PoP Section 2.4). '
+                      f'Registered submitter(s): `{reg.get("document_submitter_github")}`.'
+                  )
+
+              # Rule 2: Owner self-approval prohibition for off-cycle Material Changes
+              # Applies when change_type=material AND review_cycle is not 'annual' / 'scheduled'
+              is_material      = change_type == 'material'
+              is_offcycle      = review_cycle not in ('annual', 'scheduled')
+              is_self_approval = owner_github and (pr_author == owner_github)
+
+              if is_material and is_offcycle and is_self_approval:
+                  errors.append(
+                      f'{doc_id}: Owner self-approval of off-cycle Material Changes is prohibited '
+                      f'(PoP Section 2.11.1, footnote 9). '
+                      f'PR author `@{pr_author}` is the Document Owner. '
+                      f'A separate Document Submitter must open this PR.'
+                  )
+
+          if warnings:
+              for w in warnings:
+                  print(f'⚠️  Warning: {w}')
+
+          if errors:
+              print('\n❌ Role enforcement failed:\n')
+              for e in errors:
+                  print(f'  • {e}')
+              print('\nRefer to document-registry.yaml to update role assignments.')
+
+              # Post a comment on the PR
+              comment = '## ❌ Role Enforcement Failed\n\n'
+              comment += 'The following role violations were detected (PoP Section 2.4 / 2.11.1):\n\n'
+              for e in errors:
+                  comment += f'- {e}\n'
+              comment += '\n> Update `document-registry.yaml` or open this PR from the correct account.'
+
+              subprocess.run([
+                  'gh', 'pr', 'comment', pr,
+                  '--body', comment,
+                  '--repo', repo,
+              ], capture_output=True)
+
+              sys.exit(1)
+          else:
+              print(f'✅ Role enforcement passed for {len(changed)} changed doc(s).')
+          EOF

@@ -1,23 +1,68 @@
-# ──────────────────────────────────────────────────────────────────────────────
-# CODEOWNERS — Block Compliance DMS PoC
+# ══════════════════════════════════════════════════════════════════════════════
+# CODEOWNERS — Block Compliance DMS
+# PoP Section 2.7.3 (Policy Team QC gate) + Section 2.13 (Approval Matrix)
 #
-# Maps each tier path to the required approver(s).
-# Phase 1 (solo simulation): all tiers route to @hreynolds95.
-# Phase 2 (team): replace @hreynolds95 with real Block teammate handles.
+# PHASE 1 (PoC — personal repo): Individual handles simulate team gates.
+# PHASE 2 (squareup org): Replace individual handles with GitHub Team slugs
+#   as shown in the commented lines below each rule.
 #
-# Tier 1 — Board-approved (Chief Compliance Officer / Board delegate)
-# Tier 2 — Committee-approved (Compliance Committee member)
-# Tier 3 — Owner-approved (Document Owner)
-# ──────────────────────────────────────────────────────────────────────────────
+# Gate ordering enforced by branch protection required status checks:
+#   1. validate          — frontmatter lint (automated, no reviewer)
+#   2. policy-team-qc    — Policy Team content QC (this file, @policy-team)
+#   3. approval-gate     — Tier-appropriate approval label present
+#   4. publish           — fires on merge to main
+#
+# Two-role model (PoP Section 2.4):
+#   Document Submitter  — opens the PR (drafts changes)
+#   Document Owner      — must NOT be the PR author for off-cycle Material
+#                         Changes (PoP 2.11.1 fn.9); enforced by role-enforce.yml
+# ══════════════════════════════════════════════════════════════════════════════
 
-# Tier 1 — Board-approved
-docs/tier-1/ @hreynolds95
+# ── Policy Team QC gate (PoP 2.7.3) ──────────────────────────────────────────
+# Mandatory for ALL doc changes, all tiers. Positioned after Stakeholder Review,
+# before tiered approval. Covers: (a) content QC for revisions, (b) validity
+# assessment for new document requests.
+#
+# Phase 2: @squareup/compliance-policy-team
+docs/                   @hreynolds95
+.github/workflows/      @hreynolds95
+document-registry.yaml  @hreynolds95
 
-# Tier 2 — Committee-approved
-docs/tier-2/ @hreynolds95
+# ── Tier 1 — Board-approved (PoP 2.13, Tier 1) ───────────────────────────────
+# Requires: Owner Attestation + Leadership + Block/US Subsidiary Board
+# Approval chain: Policy Team QC → Leadership review → Board/CCO approval
+#
+# Phase 2:
+#   @squareup/compliance-policy-team @squareup/compliance-leadership @squareup/board-delegates
+docs/tier-1/            @hreynolds95
 
-# Tier 3 — Owner-approved
-docs/tier-3/ @hreynolds95
+# ── Tier 2 — Committee-approved (PoP 2.13, Tier 2) ───────────────────────────
+# Requires: Owner Attestation + Leadership + Committee
+# Subsidiary Board documents follow this same path (no separate routing).
+# Approval chain: Policy Team QC → Leadership review → Committee approval
+#
+# Phase 2:
+#   @squareup/compliance-policy-team @squareup/compliance-committee
+docs/tier-2/            @hreynolds95
 
-# Audit log — compliance team only
-audit/ @hreynolds95
+# ── Tier 3 — Owner-approved (PoP 2.13, Tier 3) ───────────────────────────────
+# Requires: Owner Attestation + Leadership
+# Approval chain: Policy Team QC → Leadership review
+#
+# Phase 2:
+#   @squareup/compliance-policy-team @squareup/compliance-leadership
+docs/tier-3/            @hreynolds95
+
+# ── Enterprise Procedures (PoP 2.13, triennial) ───────────────────────────────
+# Requires: Owner Attestation + Leadership
+# Same approval path as Tier 3; triennial review cycle.
+#
+# Phase 2:
+#   @squareup/compliance-policy-team @squareup/compliance-leadership
+docs/enterprise-procedures/ @hreynolds95
+
+# ── Audit log — append-only, Policy Team only ────────────────────────────────
+# Protects audit trail integrity. No direct edits permitted outside publish.yml.
+#
+# Phase 2: @squareup/compliance-policy-team
+audit/                  @hreynolds95

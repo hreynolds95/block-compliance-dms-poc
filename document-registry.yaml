@@ -1,6 +1,18 @@
 # Block Compliance DMS — Document Registry
 # Central metadata index. Mirrors key frontmatter fields for quick lookup by workflows.
-# Update this file whenever a doc is added, removed, or its tier/owner changes.
+#
+# Two-role model (PoP Section 2.4):
+#   document_owner_github    — GitHub handle of the Document Owner (approves changes + exceptions)
+#   document_submitter_github — GitHub handle(s) of authorized Document Submitters (draft + submit)
+#
+# Stakeholder groups (Awareness Campaign, PoP Section 2.9):
+#   stakeholder_groups — list of GitHub Team slugs or Slack channel names notified on publication
+#
+# Implementation plan link (out of scope for GitHub storage per DocArchitect constraints):
+#   implementation_plan_link — external link only; GitHub does not track plan content or status
+#
+# Update this file whenever a doc is added, removed, or its tier/owner/roles change.
+# Changes to this file require Policy Team QC approval (CODEOWNERS gate).
 
 documents:
   - doc_id: GOV-001
@@ -10,9 +22,15 @@ documents:
     domain: governance
     doc_type: Policy
     owner: Tyler Hand
+    document_owner_github: "@tyler-hand-block"          # Phase 2: real GitHub handle
+    document_submitter_github: "@hreynolds95"
+    stakeholder_groups:
+      - "#compliance-all-hands"
+      - "#compliance-policy-help"
     status: published
     next_review_date: "2026-10-31"
     path: docs/tier-1/GOV-001-cms-policy.md
+    implementation_plan_link: null
 
   - doc_id: EE-001
     title: "Block, Inc. Code of Business Conduct & Ethics"
@@ -21,9 +39,15 @@ documents:
     domain: ethics-and-employee-conduct
     doc_type: Policy
     owner: Matt Latham
+    document_owner_github: "@matt-latham-block"         # Phase 2: real GitHub handle
+    document_submitter_github: "@hreynolds95"
+    stakeholder_groups:
+      - "#compliance-all-hands"
+      - "#people-ops"
     status: published
     next_review_date: "2026-10-31"
     path: docs/tier-1/EE-001-code-of-ethics.md
+    implementation_plan_link: null
 
   - doc_id: GOV-011
     title: "Block, Inc. Compliance Policy on Policies"
@@ -32,9 +56,15 @@ documents:
     domain: governance
     doc_type: Policy
     owner: Stevi Winer
+    document_owner_github: "@stevi-winer-block"         # Phase 2: real GitHub handle
+    document_submitter_github: "@hreynolds95"
+    stakeholder_groups:
+      - "#compliance-policy-help"
+      - "#compliance-governance"
     status: published
     next_review_date: "2026-06-06"
     path: docs/tier-2/GOV-011-policy-on-policies.md
+    implementation_plan_link: null
 
   - doc_id: FC-017
     title: "SEL Financial Crimes Program"
@@ -43,9 +73,15 @@ documents:
     domain: financial-crimes
     doc_type: Standard
     owner: Ryan Goldstone
+    document_owner_github: "@ryan-goldstone-block"      # Phase 2: real GitHub handle
+    document_submitter_github: "@hreynolds95"
+    stakeholder_groups:
+      - "#financial-crimes"
+      - "#compliance-sel"
     status: published
     next_review_date: "2026-05-31"
     path: docs/tier-2/FC-017-sel-financial-crimes-program.md
+    implementation_plan_link: null
 
   - doc_id: GOV-025
     title: "Afterpay US Inc. Regulatory Change Management Standard"
@@ -54,9 +90,15 @@ documents:
     domain: governance
     doc_type: Standard
     owner: Corey Chamberlain
+    document_owner_github: "@corey-chamberlain-block"   # Phase 2: real GitHub handle
+    document_submitter_github: "@hreynolds95"
+    stakeholder_groups:
+      - "#compliance-afterpay"
+      - "#regulatory-change"
     status: published
     next_review_date: "2026-03-31"
     path: docs/tier-3/GOV-025-regulatory-change-management.md
+    implementation_plan_link: null
 
   - doc_id: FC-032
     title: "Cash App US Know Your Business Program for Cash for Business Customers"
@@ -65,6 +107,12 @@ documents:
     domain: financial-crimes
     doc_type: Standard
     owner: Vanessa Simpson
+    document_owner_github: "@vanessa-simpson-block"     # Phase 2: real GitHub handle
+    document_submitter_github: "@hreynolds95"
+    stakeholder_groups:
+      - "#financial-crimes"
+      - "#cash-app-compliance"
     status: published
     next_review_date: "2026-03-31"
     path: docs/tier-3/FC-032-kyb-program.md
+    implementation_plan_link: null
