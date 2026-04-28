@@ -1,4 +1,4 @@
-name: Validate Document Frontmatter
+name: Validate Document Frontmatter and Structure
 
 on:
   pull_request:
@@ -91,5 +91,68 @@ jobs:
                   print(f'::error::{e}')
               sys.exit(1)
           else:
-              print(f'✅ All {len(changed)} changed doc(s) passed validation.')
+              print(f'✅ All {len(changed)} changed doc(s) passed frontmatter validation.')
+          EOF
+
+      - name: Validate section structure
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          python3 - <<'EOF'
+          import subprocess, sys, re, os
+
+          base = os.environ['BASE_SHA']
+          head = os.environ['HEAD_SHA']
+
+          result = subprocess.run(
+              ['git', 'diff', '--name-only', base, head],
+              capture_output=True, text=True
+          )
+          changed = [
+              f for f in result.stdout.strip().split('\n')
+              if f.startswith('docs/') and f.endswith('.md')
+              and not f.startswith('docs/_templates/')   # templates exempt
+          ]
+
+          # Four required section headings (all doc types).
+          # Each entry: (display_name, match_fn)
+          REQUIRED = [
+              ('Overview',
+               lambda h: h.startswith('overview')),
+              ('Compliance & Enforcement',
+               lambda h: 'compliance' in h and 'enforcement' in h),
+              ('Questions & Contact Information',
+               lambda h: 'questions' in h and 'contact' in h),
+              ('Document Details & Revisions',
+               lambda h: 'document details' in h),
+          ]
+
+          HEADING_RE = re.compile(r'^#{1,6}\s+(.+)', re.MULTILINE)
+
+          errors = []
+          for path in changed:
+              if not os.path.exists(path):
+                  continue
+              content = open(path).read()
+              # Strip frontmatter before scanning headings
+              parts = content.split('---', 2)
+              body = parts[2] if len(parts) >= 3 else content
+              headings = [m.group(1).strip().lower()
+                          for m in HEADING_RE.finditer(body)]
+
+              for name, match in REQUIRED:
+                  if not any(match(h) for h in headings):
+                      errors.append(
+                          f'{path}: missing required section "{name}"'
+                      )
+
+          if errors:
+              print('\n::error::Section structure validation failed:\n')
+              for e in errors:
+                  print(f'::error::{e}')
+              print('\nRefer to docs/_templates/ or the Block Compliance template Google Docs.')
+              sys.exit(1)
+          else:
+              print(f'✅ All {len(changed)} changed doc(s) passed section structure validation.')
           EOF
