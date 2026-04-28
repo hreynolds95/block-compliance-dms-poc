@@ -1,0 +1,75 @@
+name: Exception Request
+description: Request an exception to a compliance document requirement (PoP Section 2.6.3)
+title: "[Exception] "
+labels:
+  - exception-request
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Complete all required fields. The Document Owner will review and approve or reject.
+
+        **PoP Reference:** Section 2.6.3 — approved exceptions are logged in `exceptions/exceptions.jsonl`
+        with tamper-evident commit history. Maximum exception term is 12 months.
+
+  - type: input
+    id: doc_id
+    attributes:
+      label: Document ID
+      description: The `doc_id` of the document you are requesting an exception to
+      placeholder: "e.g. FC-017"
+    validations:
+      required: true
+
+  - type: textarea
+    id: justification
+    attributes:
+      label: Justification
+      description: Written justification explaining why the exception is needed
+      placeholder: "The policy requires X, but we are doing Y because Z..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: mitigating_controls
+    attributes:
+      label: Mitigating Controls
+      description: Controls in place to mitigate the risk while this exception is active
+    validations:
+      required: true
+
+  - type: input
+    id: scope
+    attributes:
+      label: Scope
+      description: Which entities, products, or business lines this exception applies to
+      placeholder: "e.g. Cash App US only"
+    validations:
+      required: true
+
+  - type: input
+    id: effective_date
+    attributes:
+      label: Effective Date
+      description: Date the exception takes effect (YYYY-MM-DD)
+      placeholder: "2026-04-28"
+    validations:
+      required: true
+
+  - type: input
+    id: expiry_date
+    attributes:
+      label: Expiry Date
+      description: "Date the exception expires (YYYY-MM-DD). Maximum 12 months from effective date per PoP 2.6.3."
+      placeholder: "2027-04-28"
+    validations:
+      required: true
+
+  - type: input
+    id: evidence
+    attributes:
+      label: Evidence
+      description: "Link to supporting documentation, risk assessment, or control testing (Google Drive, LogicGate, etc.)"
+      placeholder: "https://drive.google.com/..."
+    validations:
+      required: false

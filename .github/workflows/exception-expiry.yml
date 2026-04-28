@@ -1,0 +1,176 @@
+name: Exception Expiry Alerts
+
+# Daily cron: reads exceptions/exceptions.jsonl and opens GitHub Issues
+# at 30 days before an exception expires and when it has expired.
+#
+# PoP reference: Section 2.6.3 (Exception expiry tracking)
+#
+# Deduplication: skips opening an Issue if an open Issue with the same
+# exception_id and label already exists.
+#
+# Phase 2: add Slack webhook notification for expired exceptions.
+
+on:
+  schedule:
+    - cron: '0 15 * * *'   # 10:00 ET daily (15:00 UTC) — offset from review-alerts
+  workflow_dispatch: {}    # manual trigger for testing
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  expiry-check:
+    name: exception-expiry-alerts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Ensure expiry labels exist
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          labels=(
+            "exception-renewal:1d76db:Exception expiring — renewal required"
+            "exception-expired:b60205:Exception has expired"
+          )
+          for entry in "${labels[@]}"; do
+            name="${entry%%:*}"
+            rest="${entry#*:}"
+            color="${rest%%:*}"
+            desc="${rest#*:}"
+            gh label create "$name" --color "$color" --description "$desc" \
+              --repo "$REPO" 2>/dev/null || true
+          done
+
+      - name: Check exception expiry dates
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          python3 - <<'EOF'
+          import os, json, subprocess
+          from datetime import date
+
+          today = date.today()
+          repo  = os.environ['REPO']
+
+          # Phase 1: all issues assigned to the PoC owner.
+          POC_ASSIGNEE = 'hreynolds95'
+
+          jsonl_path = 'exceptions/exceptions.jsonl'
+          if not os.path.exists(jsonl_path):
+              print('No exceptions/exceptions.jsonl found — nothing to check.')
+              exit(0)
+
+          exceptions = []
+          with open(jsonl_path) as f:
+              for line in f:
+                  line = line.strip()
+                  if not line:
+                      continue
+                  try:
+                      exceptions.append(json.loads(line))
+                  except json.JSONDecodeError:
+                      continue
+
+          active = [e for e in exceptions if e.get('status') == 'active']
+
+          if not active:
+              print('No active exceptions to check.')
+              exit(0)
+
+          for exc in active:
+              exception_id = exc.get('exception_id', '')
+              doc_id       = exc.get('doc_id', '')
+              title        = exc.get('title', doc_id)
+              expiry_str   = exc.get('expiry_date', '')
+              issue_url    = exc.get('issue_url', '')
+
+              if not expiry_str:
+                  continue
+              try:
+                  expiry = date.fromisoformat(str(expiry_str))
+              except (ValueError, TypeError):
+                  print(f'⚠️  {exception_id}: cannot parse expiry_date "{expiry_str}" — skipping.')
+                  continue
+
+              days_until = (expiry - today).days
+
+              if days_until == 30:
+                  label_to_apply = 'exception-renewal'
+                  alert_level    = 'Renewal Required'
+              elif days_until <= 0:
+                  label_to_apply = 'exception-expired'
+                  alert_level    = 'Expired'
+              else:
+                  continue
+
+              # Dedup: skip if open issue already exists for this exception + label
+              result = subprocess.run([
+                  'gh', 'issue', 'list',
+                  '--repo', repo,
+                  '--label', label_to_apply,
+                  '--state', 'open',
+                  '--json', 'number,title',
+              ], capture_output=True, text=True)
+              existing = json.loads(result.stdout or '[]')
+              if any(exception_id in i.get('title', '') for i in existing):
+                  print(f'⏭  {exception_id}: open {label_to_apply} issue already exists — skipping.')
+                  continue
+
+              expiry_display = expiry.strftime('%B %-d, %Y')
+              if days_until <= 0:
+                  status_note = f'**Expired {abs(days_until)} days ago** ({expiry_display})'
+                  urgency_banner = '\n> ⚠️ **This exception has expired. It must be renewed or the underlying policy requirement must be met immediately.**\n'
+              else:
+                  status_note = f'Expires in {days_until} days ({expiry_display})'
+                  urgency_banner = ''
+
+              original_link = f'\n| **Original Request** | {issue_url} |' if issue_url else ''
+
+              body = f"""## {alert_level}: Exception {exception_id} — {doc_id}
+{urgency_banner}
+| Field | Value |
+|---|---|
+| **Exception ID** | `{exception_id}` |
+| **Document** | {title} (`{doc_id}`) |
+| **Expiry Date** | {expiry_str} |
+| **Status** | {status_note} |{original_link}
+
+---
+
+### Next steps
+
+**Option A — Renew the exception:**
+1. Open a new [Exception Request](../issues/new?template=exception-request.yml) for `{doc_id}`
+2. Reference this exception (`{exception_id}`) in your justification
+3. The Document Owner will review and approve the renewal
+
+**Option B — Close the exception:**
+If the underlying gap has been remediated, no renewal is needed. Close this issue and confirm remediation in a comment.
+
+---
+_Auto-generated by `exception-expiry.yml` · {today.isoformat()}_
+"""
+
+              result = subprocess.run([
+                  'gh', 'issue', 'create',
+                  '--repo', repo,
+                  '--title', f'[{alert_level}] {exception_id} — {doc_id} expires {expiry_str}',
+                  '--body', body,
+                  '--label', label_to_apply,
+                  '--assignee', POC_ASSIGNEE,
+              ], capture_output=True, text=True)
+
+              if result.returncode == 0:
+                  url = result.stdout.strip()
+                  print(f'✅ {exception_id}: opened {label_to_apply} issue — {url}')
+              else:
+                  print(f'❌ {exception_id}: failed to open issue — {result.stderr.strip()}')
+          EOF

@@ -1,0 +1,162 @@
+name: Exception Triage
+
+# Fires when an exception-request Issue is opened.
+# Reads doc_id from the Issue body, looks up the document in
+# document-registry.yaml, applies the exception-pending label,
+# assigns the Issue to the PoC owner, and posts a structured
+# triage comment with approval instructions.
+#
+# PoP reference: Section 2.6.3 (Exception Handling)
+# Phase 2: assign to document_owner_github from registry instead of POC_ASSIGNEE.
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  triage:
+    name: exception-triage
+    runs-on: ubuntu-latest
+    if: contains(github.event.issue.labels.*.name, 'exception-request')
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install pyyaml
+
+      - name: Ensure exception labels exist
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          labels=(
+            "exception-request:bfd4f2:Exception request submitted — awaiting triage"
+            "exception-pending:e4a10c:Exception under review by Document Owner"
+            "exception-approved:0e8a16:Exception approved and logged"
+            "exception-rejected:b60205:Exception rejected"
+            "exception-renewal:1d76db:Exception expiring — renewal required"
+            "exception-expired:b60205:Exception has expired"
+          )
+          for entry in "${labels[@]}"; do
+            name="${entry%%:*}"
+            rest="${entry#*:}"
+            color="${rest%%:*}"
+            desc="${rest#*:}"
+            gh label create "$name" --color "$color" --description "$desc" \
+              --repo "$REPO" 2>/dev/null || true
+          done
+
+      - name: Triage exception request
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          ISSUE_URL: ${{ github.event.issue.html_url }}
+        run: |
+          python3 - <<'EOF'
+          import os, re, yaml, subprocess
+
+          # Phase 1: all exceptions assigned to the PoC owner.
+          # Phase 2: replace with document_owner_github from registry.
+          POC_ASSIGNEE = 'hreynolds95'
+
+          repo         = os.environ['REPO']
+          issue_number = os.environ['ISSUE_NUMBER']
+          issue_url    = os.environ['ISSUE_URL']
+          body         = os.environ['ISSUE_BODY'].replace('\r\n', '\n')
+
+          def extract_field(text, label):
+              """Extract value following a ### {label} header in a GitHub Issue Form body."""
+              pattern = rf'###\s+{re.escape(label)}\n+(.+?)(?=\n###|\Z)'
+              m = re.search(pattern, text, re.DOTALL)
+              return m.group(1).strip() if m else ''
+
+          doc_id         = extract_field(body, 'Document ID')
+          justification  = extract_field(body, 'Justification')
+          mitigating     = extract_field(body, 'Mitigating Controls')
+          scope          = extract_field(body, 'Scope')
+          effective_date = extract_field(body, 'Effective Date')
+          expiry_date    = extract_field(body, 'Expiry Date')
+          evidence       = extract_field(body, 'Evidence') or '_Not provided_'
+
+          if not doc_id:
+              print('⚠️  Could not parse doc_id from issue body — skipping triage.')
+              exit(0)
+
+          # Look up document in registry
+          registry = yaml.safe_load(open('document-registry.yaml'))
+          reg = next((d for d in registry.get('documents', [])
+                      if d.get('doc_id', '').upper() == doc_id.upper()), None)
+
+          if reg:
+              doc_title     = reg.get('title', doc_id)
+              doc_tier      = reg.get('tier', '—')
+              doc_owner     = reg.get('owner', '—')
+              owner_github  = reg.get('document_owner_github', '—')
+          else:
+              doc_title    = '_Not found in registry_'
+              doc_tier     = '—'
+              doc_owner    = '—'
+              owner_github = '—'
+              print(f'⚠️  {doc_id} not found in document-registry.yaml')
+
+          # Assign to PoC owner + apply exception-pending label
+          subprocess.run([
+              'gh', 'issue', 'edit', issue_number,
+              '--add-assignee', POC_ASSIGNEE,
+              '--add-label', 'exception-pending',
+              '--repo', repo,
+          ], check=False)
+
+          # Post triage comment
+          comment = f"""## Exception Request Triaged — {doc_id}
+
+| Field | Value |
+|---|---|
+| **Document** | {doc_title} |
+| **Tier** | {doc_tier} |
+| **Document Owner** | {doc_owner} (`{owner_github}`) |
+| **Effective Date** | {effective_date} |
+| **Expiry Date** | {expiry_date} |
+| **Scope** | {scope} |
+
+**Justification:**
+> {justification.replace(chr(10), chr(10) + '> ')}
+
+**Mitigating Controls:**
+> {mitigating.replace(chr(10), chr(10) + '> ')}
+
+**Evidence:** {evidence}
+
+---
+
+### Review instructions
+
+To **approve** this exception, apply the `exception-approved` label.
+To **reject** this exception, apply the `exception-rejected` label and add a comment explaining the reason.
+
+Once approved, an entry will be automatically committed to `exceptions/exceptions.jsonl` and this Issue will be closed.
+
+> _Phase 1 simulation: reviewed by @{POC_ASSIGNEE}. Phase 2: auto-assigned to the Document Owner (`{owner_github}`)._
+"""
+
+          result = subprocess.run([
+              'gh', 'issue', 'comment', issue_number,
+              '--body', comment,
+              '--repo', repo,
+          ], capture_output=True, text=True)
+
+          if result.returncode == 0:
+              print(f'✅ Triage comment posted on issue #{issue_number} for {doc_id}')
+          else:
+              print(f'❌ Failed to post comment: {result.stderr}')
+          EOF

@@ -1,0 +1,210 @@
+name: Exception Lifecycle
+
+# Fires when a label is applied to an exception-request Issue.
+#
+# exception-approved:
+#   - Parses Issue body for all exception fields
+#   - Generates a sequential exception_id (EX-NNN)
+#   - Appends entry to exceptions/exceptions.jsonl (append-only, tamper-evident)
+#   - Posts confirmation comment with the logged entry
+#   - Closes the Issue as completed
+#
+# exception-rejected:
+#   - Posts rejection comment
+#   - Closes the Issue as not planned
+#
+# PoP reference: Section 2.6.3 (Exception Handling)
+# Deduplication: skips commit if an entry for this issue_number already
+# exists in exceptions.jsonl (prevents double-fire on label re-add).
+
+on:
+  issues:
+    types: [labeled]
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  handle:
+    name: exception-lifecycle
+    runs-on: ubuntu-latest
+    if: |
+      contains(github.event.issue.labels.*.name, 'exception-request') &&
+      (github.event.label.name == 'exception-approved' ||
+       github.event.label.name == 'exception-rejected')
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install pyyaml
+
+      - name: Handle approval or rejection
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          LABEL: ${{ github.event.label.name }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_URL: ${{ github.event.issue.html_url }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          python3 - <<'EOF'
+          import os, re, yaml, json, subprocess
+          from datetime import datetime, timezone
+
+          repo         = os.environ['REPO']
+          label        = os.environ['LABEL']
+          issue_number = os.environ['ISSUE_NUMBER']
+          issue_url    = os.environ['ISSUE_URL']
+          actor        = os.environ['ACTOR']
+          body         = os.environ['ISSUE_BODY'].replace('\r\n', '\n')
+
+          def extract_field(text, label):
+              pattern = rf'###\s+{re.escape(label)}\n+(.+?)(?=\n###|\Z)'
+              m = re.search(pattern, text, re.DOTALL)
+              return m.group(1).strip() if m else ''
+
+          # ── Rejection path ────────────────────────────────────────────────
+          if label == 'exception-rejected':
+              comment = f"""## Exception Request Rejected
+
+This exception request has been rejected. The `exception-rejected` label has been applied.
+
+If you believe this is in error or wish to resubmit with additional information, please open a new exception request.
+
+> _Closed by @{actor}_
+"""
+              subprocess.run([
+                  'gh', 'issue', 'comment', issue_number,
+                  '--body', comment, '--repo', repo,
+              ], check=False)
+              subprocess.run([
+                  'gh', 'issue', 'close', issue_number,
+                  '--reason', 'not planned', '--repo', repo,
+              ], check=False)
+              print(f'✅ Exception #{issue_number} rejected and closed.')
+              exit(0)
+
+          # ── Approval path ─────────────────────────────────────────────────
+          doc_id         = extract_field(body, 'Document ID')
+          justification  = extract_field(body, 'Justification')
+          mitigating     = extract_field(body, 'Mitigating Controls')
+          scope          = extract_field(body, 'Scope')
+          effective_date = extract_field(body, 'Effective Date')
+          expiry_date    = extract_field(body, 'Expiry Date')
+          evidence       = extract_field(body, 'Evidence') or ''
+
+          if not doc_id:
+              print('⚠️  Could not parse doc_id from issue body — aborting approval.')
+              exit(1)
+
+          # Look up document in registry
+          registry = yaml.safe_load(open('document-registry.yaml'))
+          reg = next((d for d in registry.get('documents', [])
+                      if d.get('doc_id', '').upper() == doc_id.upper()), None)
+          doc_title = reg.get('title', doc_id) if reg else doc_id
+
+          # Dedup: skip if this issue_number is already in exceptions.jsonl
+          jsonl_path = 'exceptions/exceptions.jsonl'
+          os.makedirs('exceptions', exist_ok=True)
+          if os.path.exists(jsonl_path):
+              with open(jsonl_path) as f:
+                  for line in f:
+                      line = line.strip()
+                      if not line:
+                          continue
+                      try:
+                          entry = json.loads(line)
+                          if str(entry.get('issue_number')) == str(issue_number):
+                              print(f'⏭  Issue #{issue_number} already in exceptions.jsonl — skipping.')
+                              exit(0)
+                      except json.JSONDecodeError:
+                          continue
+
+          # Generate exception_id
+          count = 0
+          if os.path.exists(jsonl_path):
+              with open(jsonl_path) as f:
+                  count = sum(1 for line in f if line.strip())
+          exception_id = f'EX-{count + 1:03d}'
+
+          # Build entry
+          now = datetime.now(timezone.utc).isoformat()
+          entry = {
+              'exception_id':       exception_id,
+              'doc_id':             doc_id,
+              'title':              doc_title,
+              'status':             'active',
+              'scope':              scope,
+              'justification':      justification,
+              'mitigating_controls': mitigating,
+              'effective_date':     effective_date,
+              'expiry_date':        expiry_date,
+              'evidence':           evidence,
+              'approved_by':        actor,
+              'issue_number':       int(issue_number),
+              'issue_url':          issue_url,
+              'timestamp':          now,
+          }
+
+          # Append to exceptions.jsonl
+          with open(jsonl_path, 'a') as f:
+              f.write(json.dumps(entry) + '\n')
+          print(f'Appended {exception_id} to {jsonl_path}')
+
+          # Commit
+          subprocess.run(['git', 'config', 'user.name',  'github-actions[bot]'], check=True)
+          subprocess.run(['git', 'config', 'user.email', 'github-actions[bot]@users.noreply.github.com'], check=True)
+          subprocess.run(['git', 'add', jsonl_path], check=True)
+          diff = subprocess.run(['git', 'diff', '--cached', '--quiet'])
+          if diff.returncode != 0:
+              subprocess.run([
+                  'git', 'commit', '-m',
+                  f'feat(exceptions): log approved exception {exception_id} — {doc_id} (issue #{issue_number})',
+              ], check=True)
+              subprocess.run(['git', 'push'], check=True)
+              print(f'Committed and pushed {exception_id}')
+
+          # Post confirmation comment
+          evidence_line = f'\n| **Evidence** | {evidence} |' if evidence else ''
+          comment = f"""## Exception Approved — {exception_id}
+
+This exception has been approved and logged in `exceptions/exceptions.jsonl`.
+
+| Field | Value |
+|---|---|
+| **Exception ID** | `{exception_id}` |
+| **Document** | {doc_title} (`{doc_id}`) |
+| **Scope** | {scope} |
+| **Effective Date** | {effective_date} |
+| **Expiry Date** | {expiry_date} |
+| **Approved by** | @{actor} |{evidence_line}
+
+`exception-expiry.yml` will open a renewal Issue 30 days before `{expiry_date}`.
+
+> _Entry committed to `exceptions/exceptions.jsonl` at {now[:19]}Z_
+"""
+          subprocess.run([
+              'gh', 'issue', 'comment', issue_number,
+              '--body', comment, '--repo', repo,
+          ], check=False)
+
+          subprocess.run([
+              'gh', 'issue', 'close', issue_number,
+              '--reason', 'completed', '--repo', repo,
+          ], check=False)
+
+          print(f'✅ Exception {exception_id} approved, logged, and issue #{issue_number} closed.')
+          EOF
+
+      - name: Push commits
+        if: always()
+        run: git push || true
