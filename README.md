@@ -1,17 +1,29 @@
 # Block Compliance DMS — PoC
 
-A GitHub-native document change management and approval system for Block compliance policies. This proof-of-concept demonstrates branch-per-review workflows, tiered approval gates, and a full audit trail — all without a backend.
+A GitHub-native document change management and approval system for Block compliance policies.
+This proof-of-concept implements DocArchitect Sections 3–11 — tiered approvals, two-role
+enforcement, exception lifecycle, awareness campaign, orphaned document detection, and a full
+audit trail — all without a backend.
 
 **Repo:** `hreynolds95/block-compliance-dms-poc`
+**Portal (policy library):** `https://hreynolds95.github.io/block-compliance-policies/`
 
 ---
 
 ## What this proves out
 
 - Every document review happens on its own branch with a pull request
-- Approval requirements are automatically determined by document tier
+- Approval requirements are automatically determined by document tier (T1/T2/T3)
 - Merging to `main` is blocked until the correct approval label is applied
+- Two-role model enforcement: Document Submitter drafts; Document Owner approves
+- Owner self-approval prohibition on off-cycle material changes (PoP 2.11.1 fn.9)
 - Every merge triggers an immutable audit log entry
+- Exception requests are structured, triaged, lifecycle-managed, and expiry-tracked
+- Publication notifications are dispatched to stakeholder groups on merge
+- Monthly portfolio digest opens a GitHub Issue on the 1st of each month
+- Orphaned documents (no active owner) are detected weekly and flagged for reassignment
+- Non-governed sub-procedural documents (DMs, Desktop Procedures, Work Instructions) are
+  tracked in a separate registry without full governance automation
 - The entire change history is in git — no external system needed
 
 ---
@@ -20,30 +32,82 @@ A GitHub-native document change management and approval system for Block complia
 
 ```
 docs/
-  tier-1/          # Board-approved (GOV-001, EE-001)
-  tier-2/          # Committee-approved (GOV-011, FC-017)
-  tier-3/          # Owner-approved (GOV-025, FC-032)
+  tier-1/                  # Board-approved (GOV-001, EE-001)
+  tier-2/                  # Committee-approved (GOV-011, FC-017)
+  tier-3/                  # Owner-approved (GOV-025, FC-032)
+  _templates/
+    policy-standard-template.md   # Markdown mirror of official Policy/Standard template
+    procedure-template.md         # Markdown mirror of official Procedure template
+
 audit/
-  audit-log.jsonl  # Append-only publish log
-document-registry.yaml   # Central metadata index
+  audit-log.jsonl          # Append-only publication log
+
+exceptions/
+  exceptions.jsonl         # Append-only approved exception record
+
+document-registry.yaml     # Central metadata index (owner, tier, stakeholder_groups, …)
+non-governed-registry.yaml # Informational index of non-governed supporting documents
+
 .github/
   workflows/
-    annual-review.yml    # Trigger a review cycle (manual dispatch)
-    validate.yml         # Frontmatter lint on every PR
-    route-approval.yml   # Detect tier, post checklist, apply label
-    approval-gate.yml    # Required status check — blocks merge until approved
-    publish.yml          # On merge to main: update frontmatter + write audit log
+    validate.yml            # Frontmatter lint + section structure check (Gate 1)
+    role-enforce.yml        # Two-role model + self-approval prohibition (Gate 2)
+    route-approval.yml      # Detect tier, apply label, post approval checklist (Gate 3)
+    approval-gate.yml       # Required status check — blocks merge until approved (Gate 4)
+    annual-review.yml       # Trigger a review cycle (manual workflow_dispatch)
+    publish.yml             # On merge: update frontmatter, write audit log, send notifications
+    review-alerts.yml       # Daily cron — open Issues at 90/60/30d + overdue
+    exception-triage.yml    # On exception-request Issue open: triage + assign
+    exception-lifecycle.yml # On exception-approved/rejected label: write jsonl / close
+    exception-expiry.yml    # Daily cron — open renewal/expired Issues at 30d + expiry
+    monthly-digest.yml      # 1st of month cron — portfolio digest Issue + Slack
+    orphan-detection.yml    # Weekly cron + workflow_dispatch — detect unowned docs
+  ISSUE_TEMPLATE/
+    exception-request.yml   # Structured exception request form
+    new-document-request.yml # Self-service new document request form (PoP 2.7.3)
   pull_request_template.md
+
 CODEOWNERS
+
+# Architecture spec documents (DocArchitect Sections 3–11)
+ACCESS-CONTROL-MODEL.md       # Section 3
+GOVERNANCE-WORKFLOW-SPEC.md   # Section 4
+EXCEPTION-HANDLING-SPEC.md    # Section 5
+TEMPLATE-ENFORCEMENT-SPEC.md  # Section 6
+PORTAL-SPEC.md                # Section 7
+AWARENESS-CAMPAIGN-SPEC.md    # Section 8
+ORPHANED-DOCUMENT-SPEC.md     # Section 9
+NON-GOVERNED-CONTROLS.md      # Section 10
+CAPABILITY-GAP-ANALYSIS.md    # Section 11
 ```
+
+---
+
+## DocArchitect implementation status
+
+| Section | Title | Status |
+|---|---|---|
+| 3 | Access Control Model | Complete |
+| 4 | Governance Workflow Specification | Complete |
+| 5 | Exception Handling Specification | Complete |
+| 6 | Template Enforcement Specification | Complete |
+| 7 | GitHub Pages Portal Specification | Complete |
+| 8 | Awareness Campaign & Communications | Complete |
+| 9 | Orphaned Document Management | Complete |
+| 10 | Non-Governed Document Controls | Complete |
+| 11 | GitHub Capability Gap Analysis | Complete |
+| 12 | Legacy Archive & Migration Strategy | Pending |
+| 13 | Implementation Roadmap | Pending |
+| 14 | Open Decisions & Trade-offs | Pending |
+| 1–2 | Architecture Overview + Repository Taxonomy | Pending |
 
 ---
 
 ## Tiered approval model
 
-| Tier | Approval type | Required approver | Documents |
-|------|---------------|-------------------|-----------|
-| 1 | Board-approved | Board of Directors / CCO | GOV-001, EE-001 |
+| Tier | Approval type | Approval body | Documents |
+|---|---|---|---|
+| 1 | Board-approved | Block Board of Directors / CCO | GOV-001, EE-001 |
 | 2 | Committee-approved | Compliance Committee | GOV-011, FC-017 |
 | 3 | Owner-approved | Document Owner | GOV-025, FC-032 |
 
@@ -51,19 +115,91 @@ The highest tier of any document changed in a PR determines the approval require
 
 ---
 
-## End-to-end workflow
+## End-to-end governance workflow
 
 ```
-1. Initiate review  →  annual-review.yml creates branch + opens PR
-2. Validate         →  validate.yml checks frontmatter on every push to the PR
-3. Route approval   →  route-approval.yml detects tier, applies tier-N-review label,
-                        posts approval checklist comment
-4. Approve          →  Reviewer applies approved-tN label to the PR
-5. Gate check       →  approval-gate.yml re-runs, passes when approved-tN label is present
-6. Merge            →  Merge button unlocks; publish.yml fires on push to main
-7. Publish          →  publish.yml updates effective_date + last_reviewed_date in frontmatter,
-                        appends entry to audit/audit-log.jsonl
+1. Initiate review     →  annual-review.yml creates branch + opens PR
+                           (or Document Submitter opens a branch directly for off-cycle changes)
+
+2. Validate (Gate 1)   →  validate.yml: frontmatter required fields + section structure
+                           (4 required headings; docs/_templates/ exempt)
+
+3. Role enforce (Gate 2) → role-enforce.yml:
+                           Rule 1: only Document Submitter may open the PR
+                           Rule 2: Document Owner may not self-approve off-cycle material changes
+
+4. Route approval (Gate 3) → route-approval.yml: detects tier, applies tier-N-review label,
+                              posts approval checklist comment
+
+5. Policy Team QC      →  Policy Team reviews content; CODEOWNERS gate in Phase 2
+                           Phase 1: manual review by @hreynolds95
+
+6. Approve (Gate 4)    →  Reviewer applies approved-tN label to the PR
+                           approval-gate.yml re-runs and passes
+
+7. Merge               →  Merge button unlocks
+
+8. Publish             →  publish.yml fires on push to main:
+                           - Updates effective_date + last_reviewed_date in frontmatter
+                           - Appends entry to audit/audit-log.jsonl
+                           - Sends publication notifications to stakeholder_groups channels
 ```
+
+---
+
+## Exception handling workflow
+
+```
+1. Request    →  Any employee opens an Issue using the exception-request template
+                 Label auto-applied: exception-request
+
+2. Triage     →  exception-triage.yml fires:
+                 - Parses structured Issue body
+                 - Looks up Document Owner in document-registry.yaml
+                 - Assigns Issue to @hreynolds95 (Phase 1)
+                 - Applies exception-pending label
+                 - Posts triage comment with doc metadata
+
+3. Decision   →  Policy Team applies exception-approved or exception-rejected label
+
+4. Lifecycle  →  exception-lifecycle.yml fires on label:
+                 Approved → generates EX-NNN ID, appends to exceptions/exceptions.jsonl,
+                            commits, closes Issue as completed
+                 Rejected → posts comment with reasoning, closes Issue as not planned
+
+5. Expiry     →  exception-expiry.yml daily cron:
+                 30 days before expiry → opens renewal Issue (exception-renewal label)
+                 On expiry day        → opens expired Issue (exception-expired label)
+```
+
+---
+
+## Awareness campaign
+
+**Publication notification** — fires as the final step in `publish.yml` on every merge to `main`:
+- Reads `stakeholder_groups` from `document-registry.yaml` for each changed doc
+- Deduplicates channels across multi-doc merges
+- Phase 1: logs Slack payload to Actions run
+- Phase 2: POSTs to `SLACK_WEBHOOK_URL` secret (no code changes needed to activate)
+
+**Monthly portfolio digest** — `monthly-digest.yml` cron, 1st of each month:
+- Sections: portfolio summary, published last 30 days, coming due in 30 days, overdue, open exceptions
+- Always opens a GitHub Issue titled `[Monthly Digest] Compliance Policy Portfolio — {Month YYYY}`
+- Deduplicates: skips if open digest issue for current month already exists
+- Phase 1: Slack payload logged; Phase 2: posts to `#compliance-policy-help`
+
+---
+
+## Orphaned document detection
+
+`orphan-detection.yml` runs every Monday at 09:00 ET. A document is orphaned when its
+`document_owner_github` in the registry is null or empty (Phase 1) or when the owner handle
+is no longer a member of the GitHub org (Phase 2).
+
+**To simulate a departure for PoC demo:**
+1. Go to **Actions → Orphaned Document Detection → Run workflow**
+2. Enter a `doc_id` (e.g. `FC-017`)
+3. Workflow opens a `[Orphaned Document]` Issue regardless of current owner state
 
 ---
 
@@ -80,31 +216,43 @@ The highest tier of any document changed in a PR determines the approval require
 
 ## How to approve (Phase 1 — solo simulation)
 
-Branch protection requires the `approval-gate` status check to pass. The gate passes when the correct `approved-tN` label is present on the PR.
-
-To simulate sign-off without a second GitHub account:
+Branch protection requires the `approval-gate` status check to pass. The gate passes when
+the correct `approved-tN` label is present on the PR.
 
 1. Complete all tollgate checklist items in the PR
-2. Go to the PR → **Labels** → add `approved-t1`, `approved-t2`, or `approved-t3` (matching the document tier)
+2. Go to the PR → **Labels** → add `approved-t1`, `approved-t2`, or `approved-t3` (matching tier)
 3. The `approval-gate` check re-runs automatically and passes
 4. Merge is now unblocked
 
 **Labels:**
 
 | Label | Tier | Meaning |
-|-------|------|---------|
+|---|---|---|
 | `tier-1-review` | 1 | PR contains Tier 1 document changes |
 | `tier-2-review` | 2 | PR contains Tier 2 document changes |
 | `tier-3-review` | 3 | PR contains Tier 3 document changes |
 | `approved-t1` | 1 | Board / CCO sign-off simulated |
 | `approved-t2` | 2 | Committee sign-off simulated |
 | `approved-t3` | 3 | Document Owner sign-off simulated |
+| `exception-request` | — | Structured exception request filed |
+| `exception-pending` | — | Exception under review |
+| `exception-approved` | — | Exception approved; record written to jsonl |
+| `exception-rejected` | — | Exception rejected |
+| `exception-renewal` | — | Exception expiring within 30 days |
+| `exception-expired` | — | Exception past expiry date |
+| `review-due-90d` | — | Document review due in 90 days |
+| `review-due-60d` | — | Document review due in 60 days |
+| `review-due-30d` | — | Document review due in 30 days |
+| `review-overdue` | — | Document review is overdue |
+| `orphaned-document` | — | Document has no active owner |
+| `monthly-digest` | — | Monthly portfolio digest issue |
+| `new-doc-request` | — | New document request filed |
 
 ---
 
 ## Document frontmatter schema
 
-Every document in `docs/` uses YAML frontmatter. Required fields are enforced by `validate.yml` on every PR.
+Every document in `docs/` uses YAML frontmatter. Required fields are enforced by `validate.yml`.
 
 ```yaml
 ---
@@ -130,13 +278,9 @@ logicgate_record_id: "ha9ZQN82"        # Optional — LogicGate PWF record ID
 ---
 ```
 
-`approval_type` must be consistent with `tier`: board (T1), committee (T2), owner (T3). `validate.yml` enforces this and rejects mismatches.
-
----
-
-## document-registry.yaml
-
-Central metadata index at the repo root. Mirrors key frontmatter fields for quick lookup by humans and workflows. Update this file whenever a document is added, removed, or its tier/owner changes.
+`approval_type` must be consistent with `tier`. `validate.yml` rejects mismatches.
+Documents must include 4 required section headings (Overview, Compliance & Enforcement,
+Questions & Contact Information, Document Details & Revisions). `docs/_templates/` is exempt.
 
 ---
 
@@ -148,6 +292,7 @@ Every merge to `main` that touches a doc appends a JSON line to `audit/audit-log
 {
   "timestamp": "2026-04-27T18:00:00+00:00",
   "sha": "abc123...",
+  "short_sha": "abc123ab",
   "doc_id": "FC-017",
   "title": "SEL Financial Crimes Program",
   "tier": 2,
@@ -159,29 +304,43 @@ Every merge to `main` that touches a doc appends a JSON line to `audit/audit-log
 }
 ```
 
-The file is append-only and committed by `github-actions[bot]` so it cannot be altered without a visible git history entry.
+The file is append-only and committed by `github-actions[bot]`.
+
+---
+
+## Phase 1 simulation constraints
+
+- All GitHub assignments (Issues, PRs) go to `@hreynolds95` only — no other handles
+- `document_owner_github` values in the registry are placeholder handles (e.g. `@tyler-hand-block`)
+  and do not exist as real GitHub users
+- `role-enforce.yml` Rule 2 (self-approval prohibition) will not fire because PR author
+  (`hreynolds95`) never matches placeholder owner handles; temporarily set a doc's owner
+  to `@hreynolds95` to test that gate
+- `SLACK_WEBHOOK_URL` is not configured — notification payloads are logged to Actions runs
 
 ---
 
 ## Phase 2 upgrade path
 
-When teammates join, three changes convert this from solo simulation to real enforcement:
-
-1. **Update `CODEOWNERS`** — replace `@hreynolds95` with real teammate handles per tier path
-2. **Enable required PR reviews** in branch protection (1 required reviewer) — CODEOWNERS enforcement kicks in automatically
-3. **Remove label-gate dependency** — the `approved-tN` label step becomes optional; CODEOWNERS review becomes the gate
-
-The workflows themselves require no changes.
+| Change | Effect |
+|---|---|
+| Migrate repo to `squareup` org | Enables GitHub SSO/SAML, org Teams, org-level branch protection |
+| Update `CODEOWNERS` with real team handles | Tier gates become hard native enforcement |
+| Enable required PR reviews (1 reviewer) | Two-role model becomes technically enforced |
+| Set `SLACK_WEBHOOK_URL` secret | Publication notifications and monthly digest activate with no code changes |
+| Add `organization: [member_removed]` trigger to `orphan-detection.yml` | Real-time owner departure detection |
+| Enable Phase 2 portal features | "Request Review" button, exception register tab, SSO login gate |
+| Export audit log + exceptions jsonl to Snowflake | Immutable WORM record; closes audit trail gap identified in Section 11 |
 
 ---
 
 ## Documents in scope
 
 | Doc ID | Title | Tier | Owner | Next Review |
-|--------|-------|------|-------|-------------|
+|---|---|---|---|---|
 | GOV-001 | Block, Inc. Compliance Management System (CMS) Policy | 1 | Tyler Hand | 2026-10-31 |
 | EE-001 | Block, Inc. Code of Business Conduct & Ethics | 1 | Matt Latham | 2026-10-31 |
 | GOV-011 | Block, Inc. Compliance Policy on Policies | 2 | Stevi Winer | 2026-06-06 |
 | FC-017 | SEL Financial Crimes Program | 2 | Ryan Goldstone | 2026-05-31 |
 | GOV-025 | Afterpay US Inc. Regulatory Change Management Standard | 3 | Corey Chamberlain | 2026-03-31 |
-| FC-032 | Cash App US Know Your Business Program | 3 | Vanessa Simpson | 2026-03-31 |
+| FC-032 | Cash App US Know Your Business Program for Cash for Business Customers | 3 | Vanessa Simpson | 2026-03-31 |
