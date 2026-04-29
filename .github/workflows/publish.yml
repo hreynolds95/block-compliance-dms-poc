@@ -1,8 +1,9 @@
 name: Publish
 
 # Fires on every push to main. For any .md files changed under docs/,
-# updates effective_date + last_reviewed_date in frontmatter and
-# appends a record to the audit log.
+# updates effective_date + last_reviewed_date in frontmatter, appends to
+# the audit log, and sends publication notifications to configured
+# stakeholder_groups (PoP Section 2.9 / DocArchitect Section 8.3).
 
 on:
   push:
@@ -35,7 +36,7 @@ jobs:
       - name: Update frontmatter and write audit log
         run: |
           python3 - <<'EOF'
-          import subprocess, yaml, json, os, re
+          import subprocess, yaml, json, os
           from datetime import date, datetime, timezone
 
           today     = date.today().isoformat()
@@ -51,7 +52,9 @@ jobs:
           changed = [f for f in result.stdout.strip().split('\n')
                      if f.startswith('docs/') and f.endswith('.md')]
 
-          audit_entries = []
+          audit_entries  = []
+          published_docs = []   # richer metadata for notification step
+
           for path in changed:
               if not os.path.exists(path): continue
               content = open(path).read()
@@ -59,11 +62,11 @@ jobs:
               if len(parts) < 3: continue
               try:
                   fm = yaml.safe_load(parts[1])
-              except:
+              except Exception:
                   continue
 
               # Update fields
-              fm['effective_date']    = today
+              fm['effective_date']     = today
               fm['last_reviewed_date'] = today
               if fm.get('status') == 'in-review':
                   fm['status'] = 'published'
@@ -73,22 +76,39 @@ jobs:
               open(path, 'w').write(new_content)
               print(f'Updated frontmatter: {path}')
 
-              audit_entries.append({
-                  'timestamp':   now_iso,
-                  'sha':         sha,
-                  'short_sha':   short_sha,
-                  'doc_id':      fm.get('doc_id', ''),
-                  'title':       fm.get('title', ''),
-                  'tier':        fm.get('tier'),
-                  'action':      'published',
-                  'change_type': fm.get('change_type', ''),
-                  'review_cycle':fm.get('review_cycle', ''),
+              entry = {
+                  'timestamp':    now_iso,
+                  'sha':          sha,
+                  'short_sha':    short_sha,
+                  'doc_id':       fm.get('doc_id', ''),
+                  'title':        fm.get('title', ''),
+                  'tier':         fm.get('tier'),
+                  'action':       'published',
+                  'change_type':  fm.get('change_type', ''),
+                  'review_cycle': fm.get('review_cycle', ''),
                   'effective_date': today,
-                  'actor':       '${{ github.actor }}',
+                  'actor':        '${{ github.actor }}',
+              }
+              audit_entries.append(entry)
+
+              # Richer metadata passed to notification step via temp file
+              published_docs.append({
+                  'doc_id':        fm.get('doc_id', ''),
+                  'title':         fm.get('title', ''),
+                  'tier':          fm.get('tier'),
+                  'domain':        fm.get('domain', ''),
+                  'doc_type':      fm.get('doc_type', ''),
+                  'change_type':   fm.get('change_type', ''),
+                  'owner':         fm.get('owner', ''),
+                  'effective_date': today,
+                  'published_pdf': fm.get('published_pdf', ''),
               })
 
           if not audit_entries:
               print('No publishable docs found.')
+              # Write empty file so notification step exits cleanly
+              with open('/tmp/publish-docs.json', 'w') as f:
+                  json.dump([], f)
               exit(0)
 
           # Append to audit log
@@ -96,8 +116,12 @@ jobs:
           with open('audit/audit-log.jsonl', 'a') as f:
               for entry in audit_entries:
                   f.write(json.dumps(entry) + '\n')
-
           print(f'Appended {len(audit_entries)} audit entry/entries.')
+
+          # Write metadata for notification step
+          with open('/tmp/publish-docs.json', 'w') as f:
+              json.dump(published_docs, f)
+          print(f'Written {len(published_docs)} doc(s) to /tmp/publish-docs.json')
           EOF
 
       - name: Commit frontmatter updates and audit log
@@ -108,3 +132,82 @@ jobs:
           git diff --cached --quiet && echo "Nothing to commit." || \
             git commit -m "chore(publish): update frontmatter + audit log [skip ci]"
           git push
+
+      - name: Send publication notifications
+        # PoP Section 2.9 / DocArchitect Section 8.3
+        # Phase 1: SLACK_WEBHOOK_URL not configured — logs payload to Actions run.
+        # Phase 2: Set SLACK_WEBHOOK_URL secret to activate live Slack delivery.
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          python3 - <<'EOF'
+          import json, yaml, os, urllib.request
+
+          # Read published docs written by the update step
+          try:
+              with open('/tmp/publish-docs.json') as f:
+                  published = json.load(f)
+          except FileNotFoundError:
+              print('No published-docs file found — skipping notifications.')
+              exit(0)
+
+          if not published:
+              print('No published docs — skipping notifications.')
+              exit(0)
+
+          # Load registry to resolve stakeholder_groups per doc
+          with open('document-registry.yaml') as f:
+              registry = yaml.safe_load(f)
+
+          registry_by_id = {d['doc_id']: d for d in registry.get('documents', [])}
+
+          # Build channel → docs mapping, deduplicating channels across docs
+          channel_docs = {}
+          for doc in published:
+              reg = registry_by_id.get(doc['doc_id'], {})
+              for channel in reg.get('stakeholder_groups', []):
+                  channel_docs.setdefault(channel, []).append(doc)
+
+          if not channel_docs:
+              print('No stakeholder_groups configured — skipping notifications.')
+              exit(0)
+
+          portal_url  = 'https://hreynolds95.github.io/block-compliance-policies/'
+          webhook_url = os.environ.get('SLACK_WEBHOOK_URL', '')
+
+          for channel, docs in channel_docs.items():
+              doc_lines = []
+              for doc in docs:
+                  pdf_line = f'\n  {doc["published_pdf"]}' if doc.get('published_pdf') else ''
+                  doc_lines.append(
+                      f"\u2022 *{doc['title']}* ({doc['doc_id']})\n"
+                      f"  Tier {doc['tier']} \u00b7 {doc['domain']} \u00b7 {doc['doc_type']}\n"
+                      f"  Change type: {doc.get('change_type') or 'N/A'} \u00b7 Owner: {doc.get('owner') or 'N/A'}\n"
+                      f"  Effective: {doc['effective_date']}{pdf_line}"
+                  )
+
+              text = (
+                  ':page_facing_up: *Compliance Document Published*\n\n'
+                  'The following document(s) were published to the Block Compliance library:\n\n'
+                  + '\n\n'.join(doc_lines)
+                  + f'\n\nView the full library: {portal_url}'
+              )
+
+              payload = {'channel': channel, 'text': text}
+
+              if webhook_url:
+                  try:
+                      data = json.dumps(payload).encode()
+                      req  = urllib.request.Request(
+                          webhook_url, data=data,
+                          headers={'Content-Type': 'application/json'}
+                      )
+                      urllib.request.urlopen(req)
+                      print(f'Notified: {channel} ({len(docs)} doc(s))')
+                  except Exception as e:
+                      print(f'ERROR posting to {channel}: {e}')
+                      print(f'Payload:\n{json.dumps(payload, indent=2)}')
+              else:
+                  print(f'Would notify: {channel} ({len(docs)} doc(s))')
+                  print(f'Payload:\n{json.dumps(payload, indent=2)}')
+          EOF

@@ -1,0 +1,304 @@
+name: Monthly Policy Digest
+
+# Runs on the 1st of each month at 10:00 ET (15:00 UTC — close enough; cron
+# does not track DST). Provides the Policy Team with a structured summary of
+# portfolio health. (PoP Section 2.9 / DocArchitect Section 8.4)
+#
+# Delivery:
+#   GitHub Issue  — always opened (title: [Monthly Digest] Compliance Policy
+#                   Portfolio — {Month YYYY}); assigned to @hreynolds95 in
+#                   Phase 1. Deduplicated: skips if open issue with
+#                   'monthly-digest' label + current month already exists.
+#   Slack         — Phase 1: payload logged to Actions run (no webhook).
+#                   Phase 2: set SLACK_WEBHOOK_URL secret to activate.
+
+on:
+  schedule:
+    - cron: '0 15 1 * *'   # 1st of each month at 15:00 UTC ≈ 10:00–11:00 ET
+  workflow_dispatch:         # manual trigger for testing
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install pyyaml
+
+      - name: Ensure monthly-digest label exists
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh label create monthly-digest \
+            --description "Monthly compliance portfolio digest" \
+            --color 0075ca --force || true
+
+      - name: Generate and deliver digest
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python3 - <<'EOF'
+          import json, yaml, os, subprocess, urllib.request
+          from datetime import date, datetime, timedelta, timezone
+
+          today            = date.today()
+          thirty_days_ago  = today - timedelta(days=30)
+          thirty_days_fwd  = today + timedelta(days=30)
+          month_label      = today.strftime('%B %Y')          # e.g. "May 2026"
+          issue_title      = f'[Monthly Digest] Compliance Policy Portfolio — {month_label}'
+          repo             = os.environ.get('GITHUB_REPOSITORY', 'hreynolds95/block-compliance-dms-poc')
+          issues_url       = f'https://github.com/{repo}/issues'
+
+          # ── 1. Deduplication check ────────────────────────────────────────────
+          result = subprocess.run(
+              ['gh', 'issue', 'list', '--label', 'monthly-digest',
+               '--state', 'open', '--json', 'title,number'],
+              capture_output=True, text=True
+          )
+          if result.returncode == 0:
+              for issue in json.loads(result.stdout or '[]'):
+                  if month_label in issue.get('title', ''):
+                      print(f'Digest issue already exists for {month_label}: '
+                            f'#{issue["number"]} — skipping.')
+                      exit(0)
+
+          # ── 2. Published last 30 days (audit log) ─────────────────────────────
+          recently_published = []
+          audit_path = 'audit/audit-log.jsonl'
+          if os.path.exists(audit_path):
+              with open(audit_path) as f:
+                  for line in f:
+                      line = line.strip()
+                      if not line:
+                          continue
+                      try:
+                          entry = json.loads(line)
+                      except Exception:
+                          continue
+                      if entry.get('action') != 'published':
+                          continue
+                      ts_str = entry.get('timestamp', '')
+                      try:
+                          ts = datetime.fromisoformat(ts_str.replace('Z', '+00:00')).date()
+                      except Exception:
+                          continue
+                      if ts >= thirty_days_ago:
+                          recently_published.append(entry)
+
+          recently_published.sort(key=lambda e: e.get('timestamp', ''), reverse=True)
+
+          # ── 3. Document registry: coming due, overdue, portfolio summary ──────
+          with open('document-registry.yaml') as f:
+              registry = yaml.safe_load(f)
+          docs = registry.get('documents', [])
+
+          coming_due    = []
+          overdue       = []
+          status_counts = {}
+
+          for doc in docs:
+              status = doc.get('status', 'unknown')
+              status_counts[status] = status_counts.get(status, 0) + 1
+
+              if status != 'published':
+                  continue
+              nrd_str = str(doc.get('next_review_date', '') or '')
+              if not nrd_str:
+                  continue
+              try:
+                  nrd = date.fromisoformat(nrd_str)
+              except Exception:
+                  continue
+              if nrd < today:
+                  overdue.append(doc)
+              elif nrd <= thirty_days_fwd:
+                  coming_due.append(doc)
+
+          overdue.sort(key=lambda d: str(d.get('next_review_date', '')))
+          coming_due.sort(key=lambda d: str(d.get('next_review_date', '')))
+
+          # ── 4. Open exception requests (GitHub Issues API) ─────────────────────
+          exc_result = subprocess.run(
+              ['gh', 'issue', 'list', '--label', 'exception-request',
+               '--state', 'open', '--json', 'number,title'],
+              capture_output=True, text=True
+          )
+          open_exceptions = []
+          if exc_result.returncode == 0:
+              open_exceptions = json.loads(exc_result.stdout or '[]')
+
+          # ── 5. Build GitHub Issue body ─────────────────────────────────────────
+          total = sum(status_counts.values())
+
+          lines = [
+              f'# Compliance Policy Portfolio Digest — {month_label}',
+              '',
+              f'*Generated: {today.isoformat()} · Policy Team monthly health snapshot*',
+              '',
+              '---',
+              '',
+              '## Portfolio Summary',
+              '',
+              '| Status | Count |',
+              '|---|---|',
+          ]
+          for s, c in sorted(status_counts.items()):
+              lines.append(f'| {s} | {c} |')
+          lines += [f'| **Total** | **{total}** |', '']
+
+          # Published last 30 days
+          lines += [
+              f'## Published Last 30 Days ({len(recently_published)} document(s))',
+              '',
+          ]
+          if recently_published:
+              lines += [
+                  '| Doc ID | Title | Change Type | Published |',
+                  '|---|---|---|---|',
+              ]
+              for e in recently_published:
+                  ts_disp = e.get('timestamp', '')[:10]
+                  lines.append(
+                      f'| {e.get("doc_id","")} | {e.get("title","")} '
+                      f'| {e.get("change_type","N/A")} | {ts_disp} |'
+                  )
+          else:
+              lines.append('_No documents published in the last 30 days._')
+          lines.append('')
+
+          # Coming due in 30 days
+          lines += [
+              f'## Coming Due in 30 Days ({len(coming_due)} document(s))',
+              '',
+          ]
+          if coming_due:
+              lines += [
+                  '| Doc ID | Title | Tier | Owner | Due Date |',
+                  '|---|---|---|---|---|',
+              ]
+              for d in coming_due:
+                  lines.append(
+                      f'| {d["doc_id"]} | {d["title"]} | T{d["tier"]} '
+                      f'| {d.get("owner","N/A")} | {d["next_review_date"]} |'
+                  )
+          else:
+              lines.append('_No documents coming due in the next 30 days._')
+          lines.append('')
+
+          # Overdue
+          lines += [
+              f'## Overdue ({len(overdue)} document(s))',
+              '',
+          ]
+          if overdue:
+              lines += [
+                  '| Doc ID | Title | Tier | Owner | Was Due |',
+                  '|---|---|---|---|---|',
+              ]
+              for d in overdue:
+                  lines.append(
+                      f'| {d["doc_id"]} | {d["title"]} | T{d["tier"]} '
+                      f'| {d.get("owner","N/A")} | {d["next_review_date"]} |'
+                  )
+          else:
+              lines.append('_No overdue documents. :white_check_mark:_')
+          lines.append('')
+
+          # Open exceptions
+          lines += [
+              f'## Open Exception Requests ({len(open_exceptions)} request(s))',
+              '',
+          ]
+          if open_exceptions:
+              lines += [
+                  '| Issue | Title |',
+                  '|---|---|',
+              ]
+              for e in open_exceptions:
+                  lines.append(
+                      f'| [#{e["number"]}]({issues_url}/{e["number"]}) | {e["title"]} |'
+                  )
+          else:
+              lines.append('_No open exception requests._')
+          lines += [
+              '',
+              '---',
+              '',
+              '*Opened automatically by `monthly-digest.yml` on the 1st of each month.*  ',
+              '*Phase 2: digest will also POST to `#compliance-policy-help` once '
+              '`SLACK_WEBHOOK_URL` secret is configured.*',
+          ]
+
+          body = '\n'.join(lines)
+
+          # ── 6. Open GitHub Issue ───────────────────────────────────────────────
+          issue_result = subprocess.run(
+              ['gh', 'issue', 'create',
+               '--title',    issue_title,
+               '--body',     body,
+               '--label',    'monthly-digest',
+               '--assignee', 'hreynolds95'],
+              capture_output=True, text=True
+          )
+          if issue_result.returncode == 0:
+              issue_url = issue_result.stdout.strip()
+              print(f'Opened digest issue: {issue_url}')
+          else:
+              print(f'ERROR opening issue: {issue_result.stderr}')
+              issue_url = issues_url   # fallback for Slack link
+
+          # ── 7. Slack notification ──────────────────────────────────────────────
+          webhook_url = os.environ.get('SLACK_WEBHOOK_URL', '')
+
+          slack_lines = [
+              f':bar_chart: *Monthly Compliance Policy Digest — {month_label}*',
+              '',
+              f'Portfolio: {total} total documents',
+              (f'Published last 30d: {len(recently_published)}  |  '
+               f'Coming due: {len(coming_due)}  |  '
+               f'Overdue: {len(overdue)}  |  '
+               f'Open exceptions: {len(open_exceptions)}'),
+          ]
+          if overdue:
+              ids = ', '.join(
+                  f'{d["doc_id"]} (was {d["next_review_date"]})'
+                  for d in overdue
+              )
+              slack_lines.append(f':warning: *Overdue:* {ids}')
+          if coming_due:
+              ids = ', '.join(
+                  f'{d["doc_id"]} ({d["next_review_date"]})'
+                  for d in coming_due
+              )
+              slack_lines.append(f':calendar: *Coming due:* {ids}')
+          slack_lines += ['', f'Full digest: {issue_url}']
+          slack_text = '\n'.join(slack_lines)
+
+          payload = {'channel': '#compliance-policy-help', 'text': slack_text}
+
+          if webhook_url:
+              try:
+                  data = json.dumps(payload).encode()
+                  req  = urllib.request.Request(
+                      webhook_url, data=data,
+                      headers={'Content-Type': 'application/json'}
+                  )
+                  urllib.request.urlopen(req)
+                  print('Slack notification sent to #compliance-policy-help.')
+              except Exception as e:
+                  print(f'ERROR posting to Slack: {e}')
+                  print(f'Payload:\n{json.dumps(payload, indent=2)}')
+          else:
+              print('SLACK_WEBHOOK_URL not configured (Phase 1) — logging payload:')
+              print(slack_text)
+          EOF
