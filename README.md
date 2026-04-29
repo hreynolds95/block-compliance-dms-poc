@@ -32,21 +32,25 @@ audit trail — all without a backend.
 
 ```
 docs/
-  tier-1/                  # Board-approved (GOV-001, EE-001)
-  tier-2/                  # Committee-approved (GOV-011, FC-017)
-  tier-3/                  # Owner-approved (GOV-025, FC-032)
-  _templates/
+  tier-1/                  # Board-approved documents (GOV-001, EE-001)
+  tier-2/                  # Committee-approved documents (GOV-011, FC-017)
+  tier-3/                  # Owner-approved documents (GOV-025, FC-032)
+  _templates/              # Official document templates — EXEMPT from validate.yml gates
     policy-standard-template.md   # Markdown mirror of official Policy/Standard template
     procedure-template.md         # Markdown mirror of official Procedure template
 
 audit/
-  audit-log.jsonl          # Append-only publication log
+  audit-log.jsonl          # Append-only publication log (CODEOWNERS-protected)
 
 exceptions/
-  exceptions.jsonl         # Append-only approved exception record
+  exceptions.jsonl         # Append-only approved exception record (CODEOWNERS-protected)
 
-document-registry.yaml     # Central metadata index (owner, tier, stakeholder_groups, …)
+document-registry.yaml     # Central metadata index for workflow lookups (owner, tier,
+                           # stakeholder_groups, document_owner_github, …)
+                           # Mirrors key frontmatter fields — CODEOWNERS-gated on all changes
 non-governed-registry.yaml # Informational index of non-governed supporting documents
+                           # (DMs, Desktop Procedures, Work Instructions, job aids, etc.)
+                           # No workflow automation reads or writes this file
 
 .github/
   workflows/
@@ -69,7 +73,9 @@ non-governed-registry.yaml # Informational index of non-governed supporting docu
 
 CODEOWNERS
 
-# Architecture spec documents (DocArchitect Sections 3–14)
+# Architecture spec documents (DocArchitect Sections 1–14)
+ARCHITECTURE-OVERVIEW.md      # Section 1
+# Section 2 — Repository & Directory Taxonomy is covered by this README
 ACCESS-CONTROL-MODEL.md       # Section 3
 GOVERNANCE-WORKFLOW-SPEC.md   # Section 4
 EXCEPTION-HANDLING-SPEC.md    # Section 5
@@ -84,6 +90,48 @@ LEGACY-ARCHIVE.md             # Section 12 — pre-migration link registry
 IMPLEMENTATION-ROADMAP.md     # Section 13
 OPEN-DECISIONS.md             # Section 14
 ```
+
+---
+
+## Naming conventions
+
+### `doc_id` format
+
+Every In-Scope Document has a unique identifier: `{DOMAIN_PREFIX}-{NNN}`
+
+| Domain prefix | Compliance domain |
+|---|---|
+| `GOV` | Governance |
+| `FC` | Financial Crimes |
+| `EE` | Ethics and Employee Conduct |
+| `PRV` | Privacy and Data |
+| `REG` | Regulatory Affairs |
+| `OPR` | Operational Risk |
+| `TPR` | Third-Party Risk |
+
+Numbers are sequential within each domain prefix, assigned by the Policy Team at document
+creation. Once assigned, a `doc_id` never changes — even if the document is retired.
+
+**Examples:** `GOV-001`, `FC-017`, `EE-001`
+
+### File naming convention
+
+Document files follow the pattern `{doc_id}-{kebab-slug}.md`:
+
+```
+docs/tier-2/FC-017-sel-financial-crimes-program.md
+docs/tier-1/GOV-001-cms-policy.md
+docs/tier-3/GOV-025-regulatory-change-management.md
+```
+
+The slug is a lowercase, hyphen-separated abbreviation of the document title. It is
+informational only — `doc_id` is the authoritative identifier used by all workflows
+and the registry.
+
+### Non-governed document IDs
+
+Non-governed documents tracked in `non-governed-registry.yaml` use `NG-{NNN}` identifiers
+(e.g. `NG-001`). These are assigned manually by the Policy Team and carry no tier prefix.
 
 ---
 
@@ -103,7 +151,8 @@ OPEN-DECISIONS.md             # Section 14
 | 12 | Legacy Archive & Migration Strategy | Complete |
 | 13 | Implementation Roadmap | Complete |
 | 14 | Open Decisions & Trade-offs | Complete |
-| 1–2 | Architecture Overview + Repository Taxonomy | Pending |
+| 1 | Architecture Overview | Complete |
+| 2 | Repository & Directory Taxonomy | Complete (this README) |
 
 ---
 
