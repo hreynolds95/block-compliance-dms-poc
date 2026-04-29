@@ -69,7 +69,7 @@ non-governed-registry.yaml # Informational index of non-governed supporting docu
 
 CODEOWNERS
 
-# Architecture spec documents (DocArchitect Sections 3–11)
+# Architecture spec documents (DocArchitect Sections 3–14)
 ACCESS-CONTROL-MODEL.md       # Section 3
 GOVERNANCE-WORKFLOW-SPEC.md   # Section 4
 EXCEPTION-HANDLING-SPEC.md    # Section 5
@@ -79,6 +79,10 @@ AWARENESS-CAMPAIGN-SPEC.md    # Section 8
 ORPHANED-DOCUMENT-SPEC.md     # Section 9
 NON-GOVERNED-CONTROLS.md      # Section 10
 CAPABILITY-GAP-ANALYSIS.md    # Section 11
+LEGACY-ARCHIVE-SPEC.md        # Section 12
+LEGACY-ARCHIVE.md             # Section 12 — pre-migration link registry
+IMPLEMENTATION-ROADMAP.md     # Section 13
+OPEN-DECISIONS.md             # Section 14
 ```
 
 ---
@@ -96,9 +100,9 @@ CAPABILITY-GAP-ANALYSIS.md    # Section 11
 | 9 | Orphaned Document Management | Complete |
 | 10 | Non-Governed Document Controls | Complete |
 | 11 | GitHub Capability Gap Analysis | Complete |
-| 12 | Legacy Archive & Migration Strategy | Pending |
-| 13 | Implementation Roadmap | Pending |
-| 14 | Open Decisions & Trade-offs | Pending |
+| 12 | Legacy Archive & Migration Strategy | Complete |
+| 13 | Implementation Roadmap | Complete |
+| 14 | Open Decisions & Trade-offs | Complete |
 | 1–2 | Architecture Overview + Repository Taxonomy | Pending |
 
 ---
