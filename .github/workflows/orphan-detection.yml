@@ -1,0 +1,267 @@
+name: Orphaned Document Detection
+
+# Scans document-registry.yaml for published documents whose
+# document_owner_github is null or empty, then opens a GitHub Issue
+# prompting the Policy Team to assign a new owner before the next
+# review cycle is missed. (PoP Section 2.4 / DocArchitect Section 9)
+#
+# Phase 1 (personal account):
+#   - Detects null / empty document_owner_github handles only
+#   - workflow_dispatch with doc_id: manually flags any doc to simulate
+#     a real departure event for PoC demonstration
+#   - No org membership API (personal account limitation)
+#
+# Phase 2 (squareup org):
+#   - Add organization: [member_removed] trigger to catch real-time departures
+#   - Replace null-check with GitHub org API membership verification
+
+on:
+  schedule:
+    - cron: '0 14 * * 1'   # Every Monday at 14:00 UTC ≈ 09:00–10:00 ET
+  workflow_dispatch:
+    inputs:
+      doc_id:
+        description: 'Doc ID to flag as orphaned (Phase 1 simulation — leave blank for full scan)'
+        required: false
+        default: ''
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  detect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install pyyaml
+
+      - name: Ensure orphaned-document label exists
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh label create orphaned-document \
+            --description "Published document with no active Document Owner" \
+            --color e4e669 --force || true
+
+      - name: Detect orphaned documents and open issues
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          DISPATCH_DOC_ID: ${{ github.event.inputs.doc_id }}
+        run: |
+          python3 - <<'EOF'
+          import json, yaml, os, subprocess, urllib.request
+          from datetime import date, timedelta
+
+          POC_ASSIGNEE = 'hreynolds95'
+          today        = date.today()
+          repo         = os.environ.get('GITHUB_REPOSITORY', 'hreynolds95/block-compliance-dms-poc')
+          issues_url   = f'https://github.com/{repo}/issues'
+
+          dispatch_doc_id = os.environ.get('DISPATCH_DOC_ID', '').strip()
+          simulation_mode = bool(dispatch_doc_id)
+
+          # Load registry
+          with open('document-registry.yaml') as f:
+              registry = yaml.safe_load(f)
+          docs = registry.get('documents', [])
+
+          # ── Determine which docs to evaluate ─────────────────────────────────
+          if simulation_mode:
+              # Manual dispatch: flag the specified doc regardless of owner state
+              candidates = [d for d in docs if d.get('doc_id') == dispatch_doc_id]
+              if not candidates:
+                  print(f'No document found with doc_id={dispatch_doc_id!r} — nothing to do.')
+                  exit(0)
+              orphaned = []
+              for doc in candidates:
+                  orphaned.append({
+                      'doc': doc,
+                      'reason': f'Manually flagged via workflow_dispatch (Phase 1 simulation — doc_id={dispatch_doc_id})',
+                  })
+              print(f'Simulation mode: flagging {dispatch_doc_id} as orphaned.')
+          else:
+              # Cron scan: find published docs with null/empty document_owner_github
+              orphaned = []
+              for doc in docs:
+                  if doc.get('status') != 'published':
+                      continue
+                  handle = (doc.get('document_owner_github') or '').strip()
+                  if not handle:
+                      orphaned.append({
+                          'doc': doc,
+                          'reason': '`document_owner_github` is null or empty in `document-registry.yaml`',
+                      })
+
+          if not orphaned:
+              print('No orphaned documents detected.')
+              exit(0)
+
+          print(f'Found {len(orphaned)} orphaned document(s).')
+
+          # ── Load existing open orphan issues for deduplication ────────────────
+          existing_result = subprocess.run(
+              ['gh', 'issue', 'list', '--label', 'orphaned-document',
+               '--state', 'open', '--json', 'title,number'],
+              capture_output=True, text=True
+          )
+          existing_titles = set()
+          if existing_result.returncode == 0:
+              for issue in json.loads(existing_result.stdout or '[]'):
+                  existing_titles.add(issue.get('title', ''))
+
+          # ── Open an issue for each orphaned doc ───────────────────────────────
+          opened   = []
+          skipped  = []
+
+          for item in orphaned:
+              doc    = item['doc']
+              reason = item['reason']
+
+              doc_id   = doc.get('doc_id', '')
+              title    = doc.get('title', '')
+              tier     = doc.get('tier', 'N/A')
+              domain   = doc.get('domain', 'N/A')
+              doc_type = doc.get('doc_type', 'N/A')
+              owner    = doc.get('owner', 'N/A')
+              handle   = doc.get('document_owner_github') or '_(not set)_'
+              nrd      = str(doc.get('next_review_date', 'N/A'))
+              path     = doc.get('path', f'docs/.../{doc_id}.md')
+
+              issue_title = f'[Orphaned Document] {doc_id} \u2014 {title}'
+
+              # Deduplication
+              if issue_title in existing_titles:
+                  print(f'Issue already open for {doc_id} — skipping.')
+                  skipped.append(doc_id)
+                  continue
+
+              # Urgency flag: review date within 30 days
+              urgency_warning = ''
+              try:
+                  review_date = date.fromisoformat(nrd)
+                  days_until  = (review_date - today).days
+                  if days_until <= 0:
+                      urgency_warning = (
+                          f'\n> :rotating_light: **OVERDUE:** This document was due for '
+                          f'review on {nrd} ({abs(days_until)} day(s) ago). '
+                          f'Immediate reassignment required.\n'
+                      )
+                  elif days_until <= 30:
+                      urgency_warning = (
+                          f'\n> :warning: **Urgent:** Review due in {days_until} day(s) '
+                          f'({nrd}). Reassign before this deadline.\n'
+                      )
+              except Exception:
+                  pass
+
+              body_lines = [
+                  '## Orphaned Document Alert',
+                  '',
+                  f'**Document:** {title} (`{doc_id}`)',
+                  f'**Tier:** {tier} &nbsp;|&nbsp; **Domain:** {domain} &nbsp;|&nbsp; **Doc Type:** {doc_type}',
+                  f'**Current owner (registry):** {owner} ({handle})',
+                  f'**Next review date:** {nrd}',
+              ]
+
+              if urgency_warning:
+                  body_lines += ['', urgency_warning]
+
+              body_lines += [
+                  '',
+                  '### Why flagged',
+                  '',
+                  reason,
+                  '',
+                  '### Required action',
+                  '',
+                  'The Policy Team must assign a new Document Owner and update the registry.',
+                  '',
+                  '**Steps to resolve:**',
+                  f'1. Identify a new Document Owner (Tier {tier} approval authority required)',
+                  '2. Update `document-registry.yaml`:',
+                  f'   - `owner: "New Owner Name"` for `{doc_id}`',
+                  f'   - `document_owner_github: "@new-owner-handle"` for `{doc_id}`',
+                  f'3. Update document frontmatter: `owner` field in `{path}`',
+                  '4. Open a PR for the registry + frontmatter change (`change_type: immaterial`)',
+                  '   — merge through the standard gate sequence',
+                  '5. Comment on this issue with the new owner\'s name, handle, and PR link',
+                  '6. Close this issue once the PR is merged',
+                  '',
+                  '---',
+                  '',
+                  '*Opened automatically by `orphan-detection.yml`.*  ',
+                  '*Phase 2: workflow will also trigger on `organization.member_removed` events '
+                  'for real-time departure detection and will verify org membership via the GitHub API.*',
+              ]
+
+              body = '\n'.join(body_lines)
+
+              result = subprocess.run(
+                  ['gh', 'issue', 'create',
+                   '--title',    issue_title,
+                   '--body',     body,
+                   '--label',    'orphaned-document',
+                   '--assignee', POC_ASSIGNEE],
+                  capture_output=True, text=True
+              )
+              if result.returncode == 0:
+                  issue_url = result.stdout.strip()
+                  print(f'Opened orphan issue for {doc_id}: {issue_url}')
+                  opened.append({'doc_id': doc_id, 'title': title, 'url': issue_url,
+                                 'nrd': nrd, 'owner': owner, 'handle': handle})
+              else:
+                  print(f'ERROR opening issue for {doc_id}: {result.stderr}')
+
+          # ── Summary ───────────────────────────────────────────────────────────
+          print(f'\nSummary: {len(opened)} issue(s) opened, {len(skipped)} skipped (already open).')
+
+          if not opened:
+              exit(0)
+
+          # ── Slack notification ─────────────────────────────────────────────────
+          webhook_url = os.environ.get('SLACK_WEBHOOK_URL', '')
+
+          slack_lines = [
+              ':warning: *Orphaned Document Alert*',
+              '',
+              f'{len(opened)} document(s) have no active Document Owner:',
+          ]
+          for item in opened:
+              slack_lines.append(
+                  f"  \u2022 *{item['doc_id']}* — {item['title']} "
+                  f"(owner: {item['owner']}) | review due: {item['nrd']} | "
+                  f"<{item['url']}|Issue>"
+              )
+          slack_lines += [
+              '',
+              f'Action required: assign a new owner and update `document-registry.yaml`.',
+              f'All issues: {issues_url}?q=label%3Aorphaned-document+is%3Aopen',
+          ]
+          slack_text = '\n'.join(slack_lines)
+
+          payload = {'channel': '#compliance-policy-help', 'text': slack_text}
+
+          if webhook_url:
+              try:
+                  data = json.dumps(payload).encode()
+                  req  = urllib.request.Request(
+                      webhook_url, data=data,
+                      headers={'Content-Type': 'application/json'}
+                  )
+                  urllib.request.urlopen(req)
+                  print('Slack alert sent to #compliance-policy-help.')
+              except Exception as e:
+                  print(f'ERROR posting to Slack: {e}')
+                  print(f'Payload:\n{json.dumps(payload, indent=2)}')
+          else:
+              print('SLACK_WEBHOOK_URL not configured (Phase 1) — logging payload:')
+              print(slack_text)
+          EOF
