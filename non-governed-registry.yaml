@@ -1,0 +1,199 @@
+# Block Compliance DMS — Non-Governed Document Registry
+# Informational index of non-governed compliance documents across Block Risk & Compliance.
+# No GitHub Actions workflows read or write this file — it is maintained manually by the
+# Policy Team. See NON-GOVERNED-CONTROLS.md (Section 10) for full schema reference and
+# classification guidance.
+#
+# Categories: sub-procedural | reference | training | project | evidence
+# Doc types:  desktop-manual | desktop-procedure | work-instruction | job-aid | faq |
+#             regulatory-mapping | training | implementation-plan | working-group-notes |
+#             audit-workpaper | evidence | presentation
+# Storage:    google-drive | confluence | sharepoint | lms | grc-tool
+# Status:     active | retired
+
+documents:
+
+  # ── Sub-procedural: Desktop Manuals ────────────────────────────────────────
+
+  - ng_id: NG-001
+    title: "SEL AML Transaction Monitoring — Desktop Manual"
+    category: sub-procedural
+    doc_type: desktop-manual
+    parent_doc_id: FC-017              # SEL Financial Crimes Program
+    owner: "Ryan Goldstone, Head of SEL Financial Crimes"
+    owner_team: null                   # Phase 2: @squareup/financial-crimes-sel
+    storage_location: google-drive
+    storage_link: null                 # placeholder — add real Drive link on population
+    last_reviewed: "2025-11-01"
+    status: active
+    notes: "Covers transaction monitoring alert review workflow, escalation thresholds,
+      and SAR filing decision tree. Updated when FC-017 was last revised."
+
+  - ng_id: NG-002
+    title: "Cash App US KYB Enhanced Due Diligence — Desktop Manual"
+    category: sub-procedural
+    doc_type: desktop-manual
+    parent_doc_id: FC-032              # Cash App US KYB Program
+    owner: "Vanessa Simpson, Head of Cash App KYB"
+    owner_team: null
+    storage_location: google-drive
+    storage_link: null
+    last_reviewed: "2025-10-15"
+    status: active
+    notes: "Step-by-step EDD workflow for Cash for Business customers triggering
+      enhanced review criteria under the KYB program."
+
+  # ── Sub-procedural: Desktop Procedures ────────────────────────────────────
+
+  - ng_id: NG-003
+    title: "Afterpay US Regulatory Change Intake — Desktop Procedure"
+    category: sub-procedural
+    doc_type: desktop-procedure
+    parent_doc_id: GOV-025             # Afterpay US Regulatory Change Management Standard
+    owner: "Corey Chamberlain, Regulatory Affairs — Afterpay"
+    owner_team: null
+    storage_location: google-drive
+    storage_link: null
+    last_reviewed: "2026-01-10"
+    status: active
+    notes: "Covers how incoming regulatory alerts are triaged, assigned, and tracked
+      through the GOV-025 change management workflow."
+
+  - ng_id: NG-004
+    title: "Compliance Policy Exception Request Submission — Desktop Procedure"
+    category: sub-procedural
+    doc_type: desktop-procedure
+    parent_doc_id: GOV-011             # Block, Inc. Compliance Policy on Policies
+    owner: "Stevi Winer, Head of Compliance Policy"
+    owner_team: null
+    storage_location: google-drive
+    storage_link: null
+    last_reviewed: "2026-02-01"
+    status: active
+    notes: "Staff-facing guide for submitting exception requests via the GitHub Issue
+      form. Includes what constitutes a valid justification and typical timelines."
+
+  # ── Sub-procedural: Work Instructions ─────────────────────────────────────
+
+  - ng_id: NG-005
+    title: "LogicGate — Record Status Update Work Instruction"
+    category: sub-procedural
+    doc_type: work-instruction
+    parent_doc_id: GOV-011             # Compliance Policy on Policies
+    owner: "Hunter Reynolds, Compliance Policy"
+    owner_team: null
+    storage_location: google-drive
+    storage_link: null
+    last_reviewed: "2026-03-15"
+    status: active
+    notes: "System navigation steps for updating document status fields in LogicGate
+      when a document moves from In Review to Published. Screenshots included."
+
+  - ng_id: NG-006
+    title: "GitHub DMS — Annual Review Dispatch Work Instruction"
+    category: sub-procedural
+    doc_type: work-instruction
+    parent_doc_id: GOV-011
+    owner: "Hunter Reynolds, Compliance Policy"
+    owner_team: null
+    storage_location: google-drive
+    storage_link: null
+    last_reviewed: null
+    status: active
+    notes: "Step-by-step guide for Document Owners / Submitters to trigger annual-review.yml
+      via GitHub Actions dispatch (Phase 1). Phase 2: superseded by portal Request Review button."
+
+  # ── Reference: Job Aids ────────────────────────────────────────────────────
+
+  - ng_id: NG-007
+    title: "Compliance Document Tier Classification — Quick Reference Card"
+    category: reference
+    doc_type: job-aid
+    parent_doc_id: GOV-011
+    owner: "Stevi Winer, Head of Compliance Policy"
+    owner_team: null
+    storage_location: google-drive
+    storage_link: null
+    last_reviewed: "2026-01-20"
+    status: active
+    notes: "One-page decision tree for classifying a new document as Policy / Standard /
+      Procedure and selecting the correct tier."
+
+  - ng_id: NG-008
+    title: "Document Change Type Classification — Job Aid"
+    category: reference
+    doc_type: job-aid
+    parent_doc_id: GOV-011
+    owner: "Stevi Winer, Head of Compliance Policy"
+    owner_team: null
+    storage_location: google-drive
+    storage_link: null
+    last_reviewed: "2026-01-20"
+    status: active
+    notes: "Helps Document Owners distinguish Immaterial vs. Material vs. Scheduled Review
+      change types per PoP Section 2.11."
+
+  # ── Reference: Regulatory Mapping ─────────────────────────────────────────
+
+  - ng_id: NG-009
+    title: "Block US BSA/AML Regulatory Requirements Mapping Matrix"
+    category: reference
+    doc_type: regulatory-mapping
+    parent_doc_id: null
+    owner: "Stevi Winer, Head of Compliance Policy"
+    owner_team: null
+    storage_location: google-drive
+    storage_link: null
+    last_reviewed: "2025-12-01"
+    status: active
+    notes: "Maps US BSA/AML statutory and regulatory requirements to governing Block
+      compliance documents and control owners. Used for exam prep and gap analysis."
+
+  # ── Training ───────────────────────────────────────────────────────────────
+
+  - ng_id: NG-010
+    title: "Block Code of Business Conduct & Ethics — Annual Training Deck"
+    category: training
+    doc_type: training
+    parent_doc_id: EE-001              # Code of Business Conduct & Ethics
+    owner: "Matt Latham, Chief Ethics & Compliance Officer"
+    owner_team: null
+    storage_location: lms
+    storage_link: null
+    last_reviewed: "2025-10-31"
+    status: active
+    notes: "Annual mandatory training for all Block employees. Updated to reflect
+      EE-001 revision. Hosted in Cornerstone LMS."
+
+  # ── Project / Process ──────────────────────────────────────────────────────
+
+  - ng_id: NG-011
+    title: "GitHub DMS Phase 2 Implementation Plan"
+    category: project
+    doc_type: implementation-plan
+    parent_doc_id: null
+    owner: "Hunter Reynolds, Compliance Policy"
+    owner_team: null
+    storage_location: google-drive
+    storage_link: null                 # external link only — implementation plans are
+                                       # not stored in GitHub per DocArchitect constraints
+    last_reviewed: null
+    status: active
+    notes: "Phase 2 migration plan: squareup org setup, SSO/SAML, LogicGate readiness
+      criteria, portal button work, GooseMCP conflict search integration."
+
+  # ── Evidence / Audit ───────────────────────────────────────────────────────
+
+  - ng_id: NG-012
+    title: "Compliance Policy Program — Annual Self-Assessment 2025"
+    category: evidence
+    doc_type: audit-workpaper
+    parent_doc_id: GOV-001             # CMS Policy
+    owner: "Tyler Hand, Chief Compliance Officer"
+    owner_team: null
+    storage_location: grc-tool
+    storage_link: null
+    last_reviewed: "2025-12-31"
+    status: active
+    notes: "Annual self-assessment of the Compliance Management System against GOV-001
+      requirements. Maintained in LogicGate. Not in GitHub."
