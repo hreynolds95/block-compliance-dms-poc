@@ -1,12 +1,50 @@
 # Block Compliance DMS — PoC
 
 A GitHub-native document change management and approval system for Block compliance policies.
-This proof-of-concept implements DocArchitect Sections 3–11 — tiered approvals, two-role
+This proof-of-concept implements DocArchitect Sections 1–14 — tiered approvals, two-role
 enforcement, exception lifecycle, awareness campaign, orphaned document detection, and a full
 audit trail — all without a backend.
 
 **Repo:** `hreynolds95/block-compliance-dms-poc`
 **Portal (policy library):** `https://hreynolds95.github.io/block-compliance-policies/`
+
+---
+
+## Who interacts with what
+
+The system has two distinct surfaces. Which surface a user needs depends entirely on their
+role — most Block employees never touch GitHub at all.
+
+| Role | Portal | GitHub | GitHub knowledge needed |
+|---|---|---|---|
+| **All Block employees** | Browse policy library, search documents, view metrics dashboard, use Quincy chat | None | None |
+| **Document Submitters** | Phase 2: initiate annual review via "Request Review" button | Open PR on review branch; respond to validation and review comments | Basic — branch, PR, reading a diff |
+| **Document Owners** | Phase 2: initiate annual review via "Request Review" button | Review PR changes; confirm accuracy; approval label applied to unblock merge | Basic — navigating a PR, understanding a diff |
+| **Policy Team** | Monitor portfolio health via dashboard | Full: manage registry, apply approval labels, merge PRs, configure workflows, evaluate new doc requests | Full GitHub literacy |
+
+### What each role experiences in Phase 2 (production)
+
+**All Block employees — portal only:**
+- Search and filter the full policy library by domain, tier, owner, review status
+- Click through to document detail with metadata, PDF link, and audit history
+- Submit a new document request via a structured form (routed to Policy Team for review)
+- Ask Quincy questions about documents, owners, and requirements
+
+**Document Submitters and Owners — portal + GitHub PR:**
+- Click "Request Review" in the portal → review branch and PR created automatically
+- Navigate to the PR in GitHub to read the diff and confirm changes are correct
+- Document Owner signals approval → Policy Team applies tier approval label → merge unlocked
+- No GitHub Actions configuration, no registry editing, no workflow management
+
+**Policy Team — full GitHub:**
+- All of the above, plus: manage `document-registry.yaml`, apply approval labels, merge PRs,
+  evaluate new document request Issues, configure workflows, respond to review alerts and
+  exception requests
+
+> **Phase 1 note:** "Request Review" portal button is not yet live. Document Submitters
+> trigger reviews via GitHub Actions dispatch (Actions tab → Initiate Annual Review →
+> Run workflow). All other portal features are live at
+> https://hreynolds95.github.io/block-compliance-policies/
 
 ---
 
