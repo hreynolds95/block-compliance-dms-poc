@@ -1,0 +1,122 @@
+name: New Document Request
+description: Request the creation of a new compliance document (PoP Section 2.7.3)
+title: "[New Doc Request] "
+labels:
+  - new-doc-request
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Submit this form to request a new Policy, Standard, or Procedure. The Policy Team will
+        evaluate your request for conflicts with existing documents and alignment with the
+        governance model (PoP Section 2.7.3).
+
+        **Before submitting:** Search the [Policy Library](https://hreynolds95.github.io/block-compliance-policies/)
+        to confirm no existing document already covers this need.
+
+  - type: input
+    id: proposed_title
+    attributes:
+      label: Proposed Document Title
+      placeholder: "e.g. Cash App US Customer Complaints Handling Standard"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: doc_type
+    attributes:
+      label: Document Type
+      options:
+        - Policy
+        - Standard
+        - Procedure
+    validations:
+      required: true
+
+  - type: dropdown
+    id: proposed_tier
+    attributes:
+      label: Proposed Tier
+      description: "Tier 1 = Board-approved | Tier 2 = Committee-approved | Tier 3 = Owner-approved"
+      options:
+        - "1 — Board-approved"
+        - "2 — Committee-approved"
+        - "3 — Owner-approved"
+        - "Unsure — Policy Team to recommend"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: domain
+    attributes:
+      label: Compliance Domain
+      options:
+        - governance
+        - financial-crimes
+        - ethics-and-employee-conduct
+        - privacy-and-data
+        - regulatory-affairs
+        - operational-risk
+        - third-party-risk
+        - other
+    validations:
+      required: true
+
+  - type: input
+    id: scope
+    attributes:
+      label: Business / Entity Scope
+      description: Which brands or legal entities this document would cover
+      placeholder: "e.g. Cash App US only | Block global | Afterpay US + EU"
+    validations:
+      required: true
+
+  - type: textarea
+    id: rationale
+    attributes:
+      label: Rationale
+      description: Why is this document needed? What requirement, gap, or regulatory obligation does it address?
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: conflict_check
+    attributes:
+      label: Conflict Check Attestation
+      description: Confirm you have searched for existing documents before submitting.
+      options:
+        - label: "I have searched the Policy Library and believe no existing document fully covers this need"
+          required: true
+        - label: "I have reviewed related documents listed below (if any) and confirmed this request does not duplicate them"
+          required: false
+    validations:
+      required: true
+
+  - type: textarea
+    id: related_docs
+    attributes:
+      label: Potentially Overlapping Documents
+      description: "List any existing document IDs or titles that may be related (leave blank if none)"
+      placeholder: |
+        - GOV-011 — Block, Inc. Compliance Policy on Policies
+        - FC-017 — SEL Financial Crimes Program
+    validations:
+      required: false
+
+  - type: input
+    id: proposed_owner
+    attributes:
+      label: Proposed Document Owner
+      description: Name and title of the individual who would own this document
+      placeholder: "e.g. Jane Smith, Head of Operational Risk"
+    validations:
+      required: true
+
+  - type: input
+    id: implementation_plan
+    attributes:
+      label: Implementation Plan Link
+      description: "External link to implementation plan if one exists (Google Drive, Confluence, etc.). Implementation plans are not stored in GitHub."
+      placeholder: "https://drive.google.com/..."
+    validations:
+      required: false
