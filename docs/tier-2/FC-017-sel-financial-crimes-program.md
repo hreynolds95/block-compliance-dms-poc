@@ -20,7 +20,7 @@ change_type: immaterial
 review_cycle: annual
 published_pdf: https://drive.google.com/file/d/18JYqNcJhF4A2zaCPI87oPPJiJp2gm5NM/view?usp=sharing
 logicgate_record_id: ha9ZQN82
-review_status_note: Annual review initiated 2026-04-30
+review_status_note: Annual review initiated 2026-04-30; review in progress
 ---
 
 ## SEL Financial Crimes Program
