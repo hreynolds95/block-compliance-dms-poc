@@ -39,8 +39,10 @@ jobs:
           import subprocess, yaml, json, os
           from datetime import date, datetime, timezone
 
-          today     = date.today().isoformat()
-          now_iso   = datetime.now(timezone.utc).isoformat()
+          today_date    = date.today()
+          today         = today_date.isoformat()
+          next_year_iso = (today_date + timedelta(days=365)).isoformat()
+          now_iso       = datetime.now(timezone.utc).isoformat()
           sha       = subprocess.run(['git', 'rev-parse', 'HEAD'], capture_output=True, text=True).stdout.strip()
           short_sha = sha[:8]
 
@@ -91,6 +93,11 @@ jobs:
               content = set_fm_field(content, 'last_reviewed_date', today)
               if fm.get('status') == 'in-review':
                   content = set_fm_field(content, 'status', 'published')
+              # Advance next_review_date by 365 days only for annual reviews;
+              # off-cycle changes do not reset the review clock
+              if (fm.get('review_cycle') or '').lower() == 'annual':
+                  content = set_fm_field(content, 'next_review_date', next_year_iso)
+                  print(f'Advanced next_review_date to {next_year_iso} (annual review)')
 
               open(path, 'w').write(content)
               # Re-parse to get updated values for audit entry
@@ -98,17 +105,18 @@ jobs:
               print(f'Updated frontmatter: {path}')
 
               entry = {
-                  'timestamp':    now_iso,
-                  'sha':          sha,
-                  'short_sha':    short_sha,
-                  'doc_id':       fm.get('doc_id', ''),
-                  'title':        fm.get('title', ''),
-                  'tier':         fm.get('tier'),
-                  'action':       'published',
-                  'change_type':  fm.get('change_type', ''),
-                  'review_cycle': fm.get('review_cycle', ''),
-                  'effective_date': today,
-                  'actor':        '${{ github.actor }}',
+                  'timestamp':       now_iso,
+                  'sha':             sha,
+                  'short_sha':       short_sha,
+                  'doc_id':          fm.get('doc_id', ''),
+                  'title':           fm.get('title', ''),
+                  'tier':            fm.get('tier'),
+                  'action':          'published',
+                  'change_type':     fm.get('change_type', ''),
+                  'review_cycle':    fm.get('review_cycle', ''),
+                  'effective_date':  today,
+                  'next_review_date': fm.get('next_review_date', ''),
+                  'actor':           '${{ github.actor }}',
               }
               audit_entries.append(entry)
 
