@@ -18,22 +18,17 @@ these for resolution.
 
 ### OD-01 — Who holds `approved-t1` authority in GitHub?
 
-**Phase blocked:** Phase 1
-**Decision-maker:** Tyler Hand (CCO) + Compliance Legal + General Counsel
+**Status: RESOLVED — 2026-04-30**
+**Decision:** The Policy Governance Team applies the `approved-t1` label in GitHub. This is
+the same team that holds full control of the document registry, approval labels, and workflow
+configuration. The Board of Directors does not interact with GitHub directly; their resolution
+is recorded in Board minutes in Google Drive, and the Policy Governance Team applies the label
+as the operational trigger after Board approval is confirmed.
 
-The Board of Directors does not use GitHub. In Phase 1 simulation, `@hreynolds95` applies
-`approved-t1` as a proxy for all approval bodies. In Phase 2, applying the `approved-t1`
-label in GitHub must be a recognised, legally sufficient act of approval.
-
-**Options:**
-
-| Option | Pros | Cons |
-|---|---|---|
-| CCO applies `approved-t1` label on behalf of Board after board resolution | Minimal GitHub onboarding; approval record stays with Board minutes in Drive | Label is one step removed from the actual approval body |
-| Board Secretary applies label after resolution | Board minutes + GitHub record aligned | Requires GitHub account + SSO enrollment for Board Secretary |
-| CCO attestation comment on PR + label application | Full record in GitHub | Label authority still rests with a single individual |
-
-**Recommendation (for discussion):** CCO applies `approved-t1` after confirmed Board resolution. Board minutes in Google Drive remain the legally authoritative record; GitHub label is the operational trigger. `LEGACY-ARCHIVE.md` links to the Board resolution for each Tier 1 document approval.
+**Phase 2 implementation:** The Policy Governance Team GitHub team (`@squareup/policy-governance`)
+will be granted label-write permission on the `approved-t1` label. `CODEOWNERS` and label
+restriction rules will enforce that only this team can apply Tier 1 approval labels.
+`LEGACY-ARCHIVE.md` links to the Board resolution for each Tier 1 document.
 
 ---
 
