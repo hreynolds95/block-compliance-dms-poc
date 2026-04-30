@@ -148,7 +148,7 @@ jobs:
 
           ### Tollgate checklist
           {steps_md}
-          - [ ] Frontmatter updated (owner, next_review_date, version)
+          - [ ] Frontmatter updated (owner, next_review_date)
           - [ ] Document body reviewed and updated
 
           ---

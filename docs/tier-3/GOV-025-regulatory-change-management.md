@@ -1,7 +1,6 @@
 ---
 doc_id: GOV-025
 title: "Afterpay US Inc. Regulatory Change Management Standard"
-version: 1.0.0
 status: published
 tier: 3
 domain: governance

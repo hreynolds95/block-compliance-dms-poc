@@ -1,7 +1,6 @@
 ---
 doc_id: EE-001
 title: "Block, Inc. Code of Business Conduct & Ethics"
-version: 1.0.0
 status: published
 tier: 1
 domain: ethics-and-employee-conduct

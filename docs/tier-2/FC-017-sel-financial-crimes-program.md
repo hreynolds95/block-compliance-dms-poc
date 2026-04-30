@@ -1,7 +1,6 @@
 ---
 doc_id: FC-017
 title: "SEL Financial Crimes Program"
-version: 1.0.0
 status: published
 tier: 2
 domain: financial-crimes

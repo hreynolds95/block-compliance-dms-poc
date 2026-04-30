@@ -1,7 +1,6 @@
 ---
 doc_id: FC-032
 title: "Cash App US Know Your Business Program for Cash for Business Customers"
-version: 1.0.0
 status: published
 tier: 3
 domain: financial-crimes

@@ -1,7 +1,6 @@
 ---
 doc_id: GOV-011
 title: "Block, Inc. Compliance Policy on Policies"
-version: 1.0.0
 status: published
 tier: 2
 domain: governance

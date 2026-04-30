@@ -37,7 +37,7 @@ jobs:
                      if f.startswith('docs/') and f.endswith('.md')]
 
           REQUIRED = [
-              'doc_id', 'title', 'version', 'status', 'tier',
+              'doc_id', 'title', 'status', 'tier',
               'domain', 'owner', 'approval_type', 'doc_type',
               'next_review_date', 'retention_years',
           ]

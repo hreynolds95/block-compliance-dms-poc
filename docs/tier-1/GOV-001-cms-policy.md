@@ -1,7 +1,6 @@
 ---
 doc_id: GOV-001
 title: "Block, Inc. Compliance Management System (CMS) Policy"
-version: 1.0.0
 status: published
 tier: 1
 domain: governance

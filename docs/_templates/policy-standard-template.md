@@ -1,7 +1,6 @@
 ---
 doc_id: REPLACE-WITH-DOC-ID
 title: "[Title] [Policy/Standard]"
-version: 1.0.0
 status: draft
 tier: 3
 domain: REPLACE-WITH-DOMAIN
