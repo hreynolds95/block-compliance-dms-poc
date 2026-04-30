@@ -1,25 +1,26 @@
 ---
 doc_id: FC-017
-title: "SEL Financial Crimes Program"
+title: SEL Financial Crimes Program
 version: 1.0.0
 status: published
 tier: 2
 domain: financial-crimes
-legal_entity: "Squareup Europe Ltd."
-business: "Square"
-owner: "Ryan Goldstone"
+legal_entity: Squareup Europe Ltd.
+business: Square
+owner: Ryan Goldstone
 approval_type: committee
 reviewers: []
-effective_date: ""
-next_review_date: "2026-05-31"
-due_date_status: "Coming Due"
-doc_type: "Standard"
-lifecycle_status: "current"
+effective_date: ''
+next_review_date: '2026-05-31'
+due_date_status: Coming Due
+doc_type: Standard
+lifecycle_status: current
 retention_years: 5
-change_type: null
-review_cycle: null
-published_pdf: "https://drive.google.com/file/d/18JYqNcJhF4A2zaCPI87oPPJiJp2gm5NM/view?usp=sharing"
-logicgate_record_id: "ha9ZQN82"
+change_type: immaterial
+review_cycle: annual
+published_pdf: https://drive.google.com/file/d/18JYqNcJhF4A2zaCPI87oPPJiJp2gm5NM/view?usp=sharing
+logicgate_record_id: ha9ZQN82
+review_status_note: Annual review initiated 2026-04-30
 ---
 
 ## SEL Financial Crimes Program
