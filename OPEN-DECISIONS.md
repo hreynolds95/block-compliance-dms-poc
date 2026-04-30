@@ -34,18 +34,12 @@ restriction rules will enforce that only this team can apply Tier 1 approval lab
 
 ### OD-02 — Is GitHub an appropriate system of record for legally significant compliance documents?
 
-**Phase blocked:** Phase 4 (Cutover)
-**Decision-maker:** General Counsel + Tyler Hand (CCO)
-
-GitHub was designed as a code repository. Storing legally significant compliance documents
-(Board-approved policies, committee-approved standards) as Markdown files in a git repo is
-technically sound but requires legal sign-off that:
-
-1. A Markdown file in GitHub constitutes a valid controlled document under Block's legal and regulatory obligations
-2. The GitHub audit trail (commit history + `audit-log.jsonl`) satisfies record-keeping requirements applicable to Block's regulated entities
-3. GitHub's data residency and security posture are acceptable for compliance document storage
-
-**Resolution needed before Phase 4 cutover.** No blocking issue is anticipated given GitHub's enterprise security posture and the supplementary audit export to Snowflake, but formal General Counsel sign-off is required.
+**Status: RESOLVED — 2026-04-30**
+**Decision:** General Counsel sign-off on the system of record is not part of the current
+compliance document management process and there is no expectation to introduce it. The
+Policy Governance Team retains authority over system-of-record decisions for compliance
+documents. GitHub as the authoritative store is consistent with existing governance practice
+and does not require a separate legal sign-off gate before Phase 4 cutover.
 
 ---
 
