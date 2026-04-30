@@ -92,20 +92,36 @@ correct stakeholder groups).
 
 ### OD-05 — PDF generation: automated from Markdown or manual upload?
 
-**Phase blocked:** Phase 2
-**Decision-maker:** Hunter Reynolds + Document Owners
+**Status: RESOLVED — 2026-04-30**
+**Decision:** All compliance document content will be authored and maintained in Markdown
+in the GitHub repository. On merge, `publish.yml` generates a Block-branded PDF via `pandoc`
+and stores it in Google Drive. The `published_pdf` frontmatter field holds the Drive link to
+the generated output. Google Docs authoring is retired as the source of truth.
 
-The `published_pdf` frontmatter field holds a Google Drive link. Currently PDFs are authored
-in Google Docs and manually uploaded. There is no automated PDF generation from the Markdown
-source.
+**Rationale:**
 
-**Options:**
+1. **Block intelligence world model** — Markdown in the repo is machine-readable and indexable.
+   Quincy's RAG can query actual document content, not just metadata. Any future Block AI
+   tooling can consume the full compliance corpus directly.
 
-| Option | Pros | Cons |
-|---|---|---|
-| Continue manual PDF upload to Drive; update `published_pdf` link | No change to current process | Markdown and PDF can diverge; manual step in publish workflow |
-| Generate PDF from Markdown on merge via `pandoc` in `publish.yml`; upload to Drive via API | Markdown is single source of truth; no divergence | `pandoc` output requires formatting tuning; Block-branded PDF template needed |
-| Abandon Google Docs authoring; Markdown is the only source | Simplest long-term | Significant change management for policy writers accustomed to Google Docs |
+2. **Single source of truth** — Markdown is authoritative. The PDF is a derived, generated
+   output. Markdown and PDF cannot diverge.
+
+3. **Audit and regulator downloads** — Generated PDFs are provably derived from the
+   version-controlled source. Every published PDF maps to a specific git SHA — a stronger
+   chain of custody than a manually uploaded file of unknown provenance.
+
+4. **Portal rendering** — The portal can render Markdown natively and serve generated PDFs
+   for download, eliminating the need for a separate PDF store for staff viewing.
+
+**Phase 2 implementation requirements:**
+
+- Block-branded `pandoc` LaTeX template (logos, fonts, footer with doc_id + effective_date)
+- `publish.yml` PDF generation step: `pandoc {path} -o {doc_id}.pdf --template block-policy`
+- Google Drive API upload in `publish.yml`; write returned URL to `published_pdf` frontmatter
+- Content migration: ~160 existing LogicGate documents converted to Markdown during Phase 2
+  cohort PRs (Tier 3 → Tier 2 → Tier 1)
+- Authoring guidance for Document Owners (lightweight Markdown authoring guide)
 
 ---
 

@@ -56,7 +56,7 @@ purpose-built GRC tools for the DMS use case.
 | Requirement | Native GitHub | Gap | PoC mitigation | Residual risk / Phase 2 |
 |---|---|---|---|---|
 | Full change history per document | Git commit log — immutable, timestamped, actor-attributed | None | Audit log frontmatter + `audit-log.jsonl` supplement git history with business-level metadata | N/A |
-| Redline (tracked changes) equivalent | GitHub PR diff view shows line-level changes between branches | **Gap:** Non-technical users unfamiliar with unified diffs; no side-by-side rich-text redline | Markdown source diffs are readable for structured documents; no PDF redline automation built | Phase 2 option: generate PDF diff on publication using pandoc + latexdiff; out of scope for PoC |
+| Redline (tracked changes) equivalent | GitHub PR diff view shows line-level changes between branches | **Gap:** Non-technical users unfamiliar with unified diffs; no side-by-side rich-text redline | Markdown source diffs are readable for structured documents; portal renders diff view in Phase 2 | Phase 2: portal renders before/after PDF or highlighted diff; `pandoc` + `latexdiff` option for side-by-side redline |
 | Point-in-time snapshot retrieval | Git tag + commit SHA = point-in-time retrieval of any file at any historical state | None | Audit log records SHA for every publication event | N/A |
 | Pre-LogicGate history | Not in GitHub | **Gap:** Documents published before October 2025 have no GitHub history | Legacy history stays in Google Drive; linked from `LEGACY-ARCHIVE.md` (Section 12) | No change needed — Google Drive is the authoritative pre-migration record |
 | Protection against history rewrite (force push) | Branch protection `--no-force-push` on main | None | Branch protection enabled on main | Phase 2: squareup org enforces this at the organization policy level |
@@ -136,7 +136,7 @@ purpose-built GRC tools for the DMS use case.
 |---|---|---|---|---|
 | LogicGate as parallel system of record | Not native — GitHub and LogicGate are separate systems | **Gap:** No automatic sync between GitHub frontmatter and LogicGate records; dual-entry risk | `logicgate_record_id` field in frontmatter links outbound; no inbound sync | Phase 2 readiness criterion: define authoritative source for each field before migration; LogicGate → GitHub migration plan in Section 12 |
 | Snowflake data pipeline | Not native | **Gap:** No native GitHub → Snowflake connector | `generate_docs_data.py` script generates `docs-data.json` from frontmatter; downstream Snowflake pipeline reads this | Phase 2: GitHub Actions cron replaces manual script execution |
-| Google Drive PDF storage | Not native | **Gap:** Published PDFs are not in GitHub; `published_pdf` is a link only | `published_pdf` frontmatter field holds Drive link; portal surfaces it in document detail drawer | No change needed — Drive is the correct home for PDFs |
+| Google Drive PDF storage | Not native | Markdown is the authoritative source; PDF is generated output | `publish.yml` generates PDF via `pandoc` on merge (Phase 2); `published_pdf` holds Drive link to generated file; portal surfaces it in document detail drawer | Phase 2: Block-branded `pandoc` template + Drive API upload step in `publish.yml` |
 | LogicGate GooseMCP conflict search | Not native | **Gap:** Semantic conflict search on new document requests requires external AI tool | Phase 1: Policy Team performs manual conflict check | Phase 2: Goose-assisted search appends related docs to new document request Issues |
 
 ---
@@ -153,4 +153,4 @@ purpose-built GRC tools for the DMS use case.
 | Real-time orphan detection | Low for PoC — weekly cron catches null handles; departure lag is acceptable | Yes — org event trigger |
 | LogicGate / GitHub dual system of record | High until migration — risk of divergence between systems | Yes — Phase 2 migration criteria in Section 12 |
 | Actions log 90-day retention | Low — `audit-log.jsonl` in repo is permanent | Yes — GitHub Enterprise 400-day retention |
-| Non-technical staff access to diffs | Medium — staff navigating GitHub.com diffs is a UX barrier | Partial — portal abstracts most of this; redline PDF generation is Phase 2 option |
+| Non-technical staff access to diffs | Medium — staff navigating GitHub.com diffs is a UX barrier | Yes — portal abstracts GitHub entirely; generated PDF redline closes the remaining gap in Phase 2 |

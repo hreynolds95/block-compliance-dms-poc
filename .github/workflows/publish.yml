@@ -153,6 +153,40 @@ jobs:
           print(f'Written {len(published_docs)} doc(s) to /tmp/publish-docs.json')
           EOF
 
+      - name: Generate and publish PDF
+        # Phase 1: No-op placeholder — logs what would be generated.
+        # Phase 2: Install pandoc + Block-branded LaTeX template; generate PDF from Markdown
+        #          source; upload to Google Drive via API; write returned URL back to
+        #          published_pdf frontmatter field.
+        #
+        # Phase 2 implementation checklist:
+        #   [ ] Add pandoc + texlive to runner (or use a pre-built container)
+        #   [ ] Add block-policy.latex template to .github/templates/
+        #   [ ] pandoc {doc_path} -o {doc_id}.pdf --template block-policy \
+        #             --metadata title="{title}" --metadata date="{effective_date}"
+        #   [ ] Upload PDF to Drive folder via Google Drive API (service account secret)
+        #   [ ] Write returned Drive URL to published_pdf frontmatter (set_fm_field)
+        #   [ ] git add + include in the commit below
+        #   [ ] Portal: serve generated PDF for staff viewing; expose download endpoint
+        #       for auditors / regulators
+        run: |
+          python3 - <<'EOF'
+          import json, os
+
+          try:
+              with open('/tmp/publish-docs.json') as f:
+                  published = json.load(f)
+          except FileNotFoundError:
+              exit(0)
+
+          for doc in published:
+              print(
+                  f"[Phase 2 — PDF generation] Would generate: "
+                  f"{doc['doc_id']} ({doc['title']}) → "
+                  f"{doc['doc_id']}-{doc['effective_date']}.pdf → Drive upload"
+              )
+          EOF
+
       - name: Commit frontmatter updates and audit log
         run: |
           git config user.name  "github-actions[bot]"
