@@ -9,7 +9,7 @@ business: "Cash App"
 owner: "Vanessa Simpson"
 approval_type: owner
 reviewers: []
-effective_date: ""
+effective_date: 2026-04-30
 next_review_date: "2026-03-31"
 due_date_status: "Pending Review"
 doc_type: "Standard"
@@ -19,6 +19,7 @@ change_type: null
 review_cycle: null
 published_pdf: "https://drive.google.com/file/d/1xDvyvxwRUkQlEp0L62A49Aw76fW1G4rb/view"
 logicgate_record_id: "te7KvfWQ"
+last_reviewed_date: 2026-04-30
 ---
 
 ## Cash App US Know Your Business Program for Cash for Business Customers

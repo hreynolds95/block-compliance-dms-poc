@@ -9,7 +9,7 @@ business: "Afterpay"
 owner: "Corey Chamberlain"
 approval_type: owner
 reviewers: []
-effective_date: ""
+effective_date: 2026-04-30
 next_review_date: "2026-03-31"
 due_date_status: "Pending Review"
 doc_type: "Standard"
@@ -19,6 +19,7 @@ change_type: null
 review_cycle: null
 published_pdf: "https://drive.google.com/file/d/12VuBLjl_qcfyxX0fc7acf5wSBcjvC19S/view?usp=sharing"
 logicgate_record_id: "3f6XmfiL"
+last_reviewed_date: 2026-04-30
 ---
 
 ## Afterpay US Inc. Regulatory Change Management Standard

@@ -9,7 +9,7 @@ business: "Block"
 owner: "Tyler Hand"
 approval_type: board
 reviewers: []
-effective_date: "2025-11-03"
+effective_date: 2026-04-30
 next_review_date: "2026-10-31"
 due_date_status: "Current"
 doc_type: "Policy"
@@ -19,6 +19,7 @@ change_type: null
 review_cycle: null
 published_pdf: "https://drive.google.com/file/d/1QgpDdLZeQcS_tPJUw_xvqhosiyI2PHwJ/view"
 logicgate_record_id: "BnzFqeSD"
+last_reviewed_date: 2026-04-30
 ---
 
 ## Block, Inc. Compliance Management System (CMS) Policy

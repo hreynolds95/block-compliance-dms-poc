@@ -9,7 +9,7 @@ business: "Block"
 owner: "Stevi Winer"
 approval_type: committee
 reviewers: []
-effective_date: "2026-02-18"
+effective_date: 2026-04-30
 next_review_date: "2026-06-06"
 due_date_status: "Coming Due"
 doc_type: "Policy"
@@ -21,6 +21,7 @@ extension_status: "in-progress"
 extended_due_date: "2026-06-26"
 published_pdf: "https://drive.google.com/file/d/1fvt49euVrP98pmbcasSUVvpLp6J_9gO-/view?usp=drive_link"
 logicgate_record_id: "1nEXbFfl"
+last_reviewed_date: 2026-04-30
 ---
 
 ## Block, Inc. Compliance Policy on Policies

@@ -15,6 +15,8 @@ change_type: null
 review_cycle: null
 published_pdf: null
 logicgate_record_id: null
+effective_date: 2026-04-30
+last_reviewed_date: 2026-04-30
 ---
 
 <!-- ═══════════════════════════════════════════════════════════════════
