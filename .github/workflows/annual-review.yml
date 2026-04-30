@@ -49,6 +49,7 @@ jobs:
           CHANGE_TYPE: ${{ github.event.inputs.change_type }}
           NOTES: ${{ github.event.inputs.notes }}
           REPO: ${{ github.repository }}
+          ACTOR: ${{ github.actor }}
         run: |
           python3 - <<'EOF'
           import subprocess, os, yaml, sys, re
@@ -58,6 +59,7 @@ jobs:
           change_type = os.environ['CHANGE_TYPE']
           notes       = os.environ.get('NOTES', '').strip()
           repo        = os.environ['REPO']
+          actor       = os.environ.get('ACTOR', '').strip()
           year        = date.today().year
           branch      = f'review/{doc_id.lower()}-{year}'
 
@@ -80,20 +82,46 @@ jobs:
           # Create branch
           subprocess.run(['git', 'checkout', '-b', branch], check=True)
 
-          # Update frontmatter: set change_type, review_cycle, bump last_reviewed_date placeholder
+          # Update frontmatter: surgically replace only change_type, review_cycle,
+          # and review_status_note — leave all other lines untouched to keep the diff clean.
+          def set_fm_field(text, field, value):
+              """Replace or append a frontmatter field without reformatting anything else."""
+              lines = text.split('\n')
+              if not lines or lines[0].strip() != '---':
+                  return text
+              # Find closing ---
+              end_idx = None
+              for i in range(1, len(lines)):
+                  if lines[i].strip() == '---':
+                      end_idx = i
+                      break
+              if end_idx is None:
+                  return text
+              # Replace existing field or append before closing ---
+              prefix = f'{field}:'
+              for i in range(1, end_idx):
+                  if lines[i].startswith(prefix):
+                      lines[i] = f'{field}: {value}'
+                      return '\n'.join(lines)
+              # Field not present — insert before closing ---
+              lines.insert(end_idx, f'{field}: {value}')
+              return '\n'.join(lines)
+
           content = open(doc_path).read()
-          parts   = content.split('---', 2)
-          fm      = yaml.safe_load(parts[1])
-          title   = fm.get('title', doc_id)
-          tier    = fm.get('tier', 3)
 
-          fm['change_type']   = change_type
-          fm['review_cycle']  = 'annual'
-          fm['review_status_note'] = f'Annual review initiated {date.today().isoformat()}'
+          # Read title and tier without modifying (parse only, don't write back)
+          parts_read = content.split('---', 2)
+          fm_read = yaml.safe_load(parts_read[1])
+          title = fm_read.get('title', doc_id)
+          tier  = fm_read.get('tier', 3)
 
-          updated_fm = yaml.dump(fm, default_flow_style=False, allow_unicode=True, sort_keys=False)
-          new_content = f'---\n{updated_fm}---{parts[2]}'
-          open(doc_path, 'w').write(new_content)
+          # Surgical updates — only these three fields change
+          content = set_fm_field(content, 'change_type',       change_type)
+          content = set_fm_field(content, 'review_cycle',      'annual')
+          content = set_fm_field(content, 'review_status_note',
+                                 f'Annual review initiated {date.today().isoformat()}')
+
+          open(doc_path, 'w').write(content)
 
           # Commit and push
           subprocess.run(['git', 'add', doc_path], check=True)
@@ -108,12 +136,13 @@ jobs:
           }
           steps_md  = '\n'.join(approval_steps.get(tier, approval_steps[3]))
           notes_md  = f'\n**Notes:** {notes}\n' if notes else ''
+          actor_md  = f'\n**Triggered by:** @{actor}' if actor else ''
           body = f"""## Annual Review — {doc_id}
 
           **Document:** {title}
           **Tier:** {tier}
           **Change type:** {change_type}
-          **Review year:** {year}{notes_md}
+          **Review year:** {year}{actor_md}{notes_md}
 
           ---
 
