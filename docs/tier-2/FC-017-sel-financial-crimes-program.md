@@ -10,7 +10,7 @@ business: "Square"
 owner: "Ryan Goldstone"
 approval_type: committee
 reviewers: []
-effective_date: ""
+effective_date: 2026-04-30
 next_review_date: "2027-04-30"
 due_date_status: "Current"
 doc_type: "Standard"
@@ -21,6 +21,7 @@ review_cycle: annual
 published_pdf: "https://drive.google.com/file/d/18JYqNcJhF4A2zaCPI87oPPJiJp2gm5NM/view?usp=sharing"
 logicgate_record_id: "ha9ZQN82"
 review_status_note: Annual review completed 2026-04-30
+last_reviewed_date: 2026-04-30
 ---
 
 ## SEL Financial Crimes Program
